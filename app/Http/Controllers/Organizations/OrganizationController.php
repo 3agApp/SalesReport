@@ -55,7 +55,6 @@ class OrganizationController extends Controller
                 'id' => $organization->id,
                 'name' => $organization->name,
                 'slug' => $organization->slug,
-                'isPersonal' => $organization->is_personal,
             ],
             'members' => $organization->members()->get()->map(function (User $member) {
                 /** @var Membership $membership */
@@ -126,21 +125,17 @@ class OrganizationController extends Controller
 
         $user = $request->user();
 
-        $fallbackOrganization = $user->isCurrentOrganization($organization)
-            ? $user->fallbackOrganization($organization)
-            : null;
-
         $organization->memberships()
             ->where('user_id', $user->id)
             ->delete();
 
-        if ($fallbackOrganization) {
-            $user->switchOrganization($fallbackOrganization);
+        if ($user->isCurrentOrganization($organization)) {
+            $user->switchToFallbackOrganization($organization);
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('You left the organization ":name"', ['name' => $organization->name])]);
 
-        return to_route('organizations.index');
+        return to_route($user->currentOrganization ? 'organizations.index' : 'onboarding');
     }
 
     /**
@@ -149,26 +144,23 @@ class OrganizationController extends Controller
     public function destroy(DeleteOrganizationRequest $request, Organization $organization): RedirectResponse
     {
         $user = $request->user();
-        $fallbackOrganization = $user->isCurrentOrganization($organization)
-            ? $user->fallbackOrganization($organization)
-            : null;
 
         DB::transaction(function () use ($user, $organization) {
             User::where('current_organization_id', $organization->id)
                 ->where('id', '!=', $user->id)
-                ->each(fn (User $affectedUser) => $affectedUser->switchOrganization($affectedUser->personalOrganization()));
+                ->each(fn (User $affectedUser) => $affectedUser->switchToFallbackOrganization($organization));
 
             $organization->invitations()->delete();
             $organization->memberships()->delete();
             $organization->delete();
         });
 
-        if ($fallbackOrganization) {
-            $user->switchOrganization($fallbackOrganization);
+        if ($user->isCurrentOrganization($organization)) {
+            $user->switchToFallbackOrganization($organization);
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Organization deleted.')]);
 
-        return to_route('organizations.index');
+        return to_route($user->fresh()->currentOrganization ? 'organizations.index' : 'onboarding');
     }
 }

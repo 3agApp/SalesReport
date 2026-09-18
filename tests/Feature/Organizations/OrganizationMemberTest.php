@@ -110,10 +110,10 @@ test('organization member role cannot be set to owner', function () {
     expect($organization->members()->where('user_id', $member->id)->first()->pivot->role->value)->toEqual(OrganizationRole::Member->value);
 });
 
-test('removed member current organization is set to personal organization', function () {
+test('removed member current organization falls back to another organization', function () {
     $owner = User::factory()->create();
     $member = User::factory()->create();
-    $personalOrganization = $member->personalOrganization();
+    $memberOrganization = $member->currentOrganization;
     $organization = Organization::factory()->create();
 
     $organization->members()->attach($owner, ['role' => OrganizationRole::Owner->value]);
@@ -125,5 +125,22 @@ test('removed member current organization is set to personal organization', func
         ->actingAs($owner)
         ->delete(route('organizations.members.destroy', [$organization, $member]));
 
-    expect($member->fresh()->current_organization_id)->toEqual($personalOrganization->id);
+    expect($member->fresh()->current_organization_id)->toEqual($memberOrganization->id);
+});
+
+test('removed member without another organization has no current organization', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->withoutOrganization()->create();
+    $organization = Organization::factory()->create();
+
+    $organization->members()->attach($owner, ['role' => OrganizationRole::Owner->value]);
+    $organization->members()->attach($member, ['role' => OrganizationRole::Member->value]);
+
+    $member->update(['current_organization_id' => $organization->id]);
+
+    $this
+        ->actingAs($owner)
+        ->delete(route('organizations.members.destroy', [$organization, $member]));
+
+    expect($member->fresh()->current_organization_id)->toBeNull();
 });

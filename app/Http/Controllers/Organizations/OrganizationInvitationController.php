@@ -10,13 +10,39 @@ use App\Models\Organization;
 use App\Models\OrganizationInvitation;
 use App\Notifications\Organizations\OrganizationInvitation as OrganizationInvitationNotification;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Inertia;
+use Inertia\Response;
 
 class OrganizationInvitationController extends Controller
 {
+    /**
+     * List the invitations waiting on the authenticated user.
+     */
+    public function index(Request $request): Response
+    {
+        return Inertia::render('invitations/index', [
+            'invitations' => OrganizationInvitation::query()
+                ->pendingFor($request->user()->email)
+                ->with(['inviter', 'organization'])
+                ->latest()
+                ->get()
+                ->map(fn (OrganizationInvitation $invitation) => [
+                    'code' => $invitation->code,
+                    'inviterName' => $invitation->inviter->name,
+                    'roleLabel' => $invitation->role->label(),
+                    'expiresAt' => $invitation->expires_at?->toIso8601String(),
+                    'organization' => [
+                        'name' => $invitation->organization->name,
+                        'slug' => $invitation->organization->slug,
+                    ],
+                ]),
+        ]);
+    }
+
     /**
      * Store a newly created invitation.
      */
@@ -89,6 +115,12 @@ class OrganizationInvitationController extends Controller
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation declined.')]);
 
-        return to_route('dashboard');
+        $morePending = OrganizationInvitation::query()->pendingFor($request->user()->email)->exists();
+
+        if ($morePending) {
+            return to_route('invitations.index');
+        }
+
+        return to_route($request->user()->currentOrganization ? 'dashboard' : 'onboarding');
     }
 }

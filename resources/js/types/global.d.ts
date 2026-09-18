@@ -15,6 +15,7 @@ declare module '@inertiajs/core' {
             sidebarOpen: boolean;
             currentOrganization: Organization | null;
             organizations: Organization[];
+            pendingInvitationsCount: number;
             [key: string]: unknown;
         };
     }

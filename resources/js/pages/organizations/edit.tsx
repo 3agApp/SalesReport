@@ -94,7 +94,7 @@ export default function OrganizationEdit({
             <h1 className="sr-only">{pageTitle}</h1>
 
             <div className="flex flex-col space-y-10">
-                <div className="space-y-6">
+                <div className="space-y-6 border-t pt-8 first:border-0 first:pt-0">
                     {permissions.canUpdateOrganization ? (
                         <>
                             <Heading
@@ -123,7 +123,7 @@ export default function OrganizationEdit({
                                             <InputError message={errors.name} />
                                         </div>
 
-                                        <div className="flex items-center gap-4">
+                                        <div className="flex flex-wrap items-center gap-4">
                                             <Button
                                                 type="submit"
                                                 data-test="organization-save-button"
@@ -146,8 +146,8 @@ export default function OrganizationEdit({
                     )}
                 </div>
 
-                <div className="space-y-6">
-                    <div className="flex items-center justify-between">
+                <div className="space-y-6 border-t pt-8 first:border-0 first:pt-0">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                         <Heading
                             variant="small"
                             title="Organization members"
@@ -173,9 +173,9 @@ export default function OrganizationEdit({
                             <div
                                 key={member.id}
                                 data-test="member-row"
-                                className="flex items-center justify-between rounded-lg border p-4"
+                                className="flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4"
                             >
-                                <div className="flex items-center gap-4">
+                                <div className="flex flex-wrap items-center gap-4">
                                     <Avatar className="h-10 w-10">
                                         {member.avatar ? (
                                             <AvatarImage
@@ -265,7 +265,7 @@ export default function OrganizationEdit({
                 </div>
 
                 {invitations.length > 0 ? (
-                    <div className="space-y-6">
+                    <div className="space-y-6 border-t pt-8 first:border-0 first:pt-0">
                         <Heading
                             variant="small"
                             title="Pending invitations"
@@ -277,9 +277,9 @@ export default function OrganizationEdit({
                                 <div
                                     key={invitation.code}
                                     data-test="invitation-row"
-                                    className="flex items-center justify-between rounded-lg border p-4"
+                                    className="flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4"
                                 >
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex flex-wrap items-center gap-4">
                                         <div className="bg-muted flex h-10 w-10 items-center justify-center rounded-full">
                                             <Mail className="text-muted-foreground h-5 w-5" />
                                         </div>
@@ -322,9 +322,8 @@ export default function OrganizationEdit({
                     </div>
                 ) : null}
 
-                {permissions.canDeleteOrganization &&
-                !organization.isPersonal ? (
-                    <div className="space-y-6">
+                {permissions.canDeleteOrganization ? (
+                    <div className="space-y-6 border-t pt-8 first:border-0 first:pt-0">
                         <Heading
                             variant="small"
                             title="Delete organization"
@@ -373,7 +372,7 @@ export default function OrganizationEdit({
                 onOpenChange={setCancelInvitationDialogOpen}
             />
 
-            {permissions.canDeleteOrganization && !organization.isPersonal ? (
+            {permissions.canDeleteOrganization ? (
                 <DeleteOrganizationModal
                     organization={organization}
                     open={deleteDialogOpen}

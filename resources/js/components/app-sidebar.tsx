@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid, Settings2, Store } from 'lucide-react';
+import { LayoutGrid, Mail, Settings2, Store } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -13,16 +13,17 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard } from '@/routes';
+import { dashboard, onboarding } from '@/routes';
+import { index as invitationsIndex } from '@/routes/invitations';
 import { edit as editOrganization } from '@/routes/organizations';
 import { index as shopsIndex } from '@/routes/shops';
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
-    const { currentOrganization } = usePage().props;
+    const { currentOrganization, pendingInvitationsCount } = usePage().props;
     const dashboardUrl = currentOrganization
         ? dashboard(currentOrganization.slug)
-        : '/';
+        : onboarding();
 
     const mainNavItems: NavItem[] = [
         {
@@ -45,6 +46,15 @@ export function AppSidebar() {
                 icon: Settings2,
             },
         );
+    }
+
+    if (pendingInvitationsCount > 0) {
+        mainNavItems.push({
+            title: 'Invitations',
+            href: invitationsIndex(),
+            icon: Mail,
+            badge: pendingInvitationsCount,
+        });
     }
 
     return (

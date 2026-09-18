@@ -1,12 +1,10 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import { ExternalLink, Store } from 'lucide-react';
-import { useState } from 'react';
-import PendingInvitationsModal from '@/components/pending-invitations-modal';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 import { edit as editOrganization } from '@/routes/organizations';
 import { index as shopsIndex } from '@/routes/shops';
-import type { DashboardInvitation, OrganizationPermissions } from '@/types';
+import type { OrganizationPermissions } from '@/types';
 
 type RecentShop = {
     id: number;
@@ -24,7 +22,6 @@ type Props = {
     };
     recentShops: RecentShop[];
     permissions: OrganizationPermissions;
-    pendingInvitations?: DashboardInvitation[];
 };
 
 type Stat = {
@@ -55,16 +52,8 @@ function StatTile({ stat }: { stat: Stat }) {
     );
 }
 
-export default function Dashboard({
-    stats,
-    recentShops,
-    permissions,
-    pendingInvitations = [],
-}: Props) {
+export default function Dashboard({ stats, recentShops, permissions }: Props) {
     const { currentOrganization } = usePage().props;
-    const [showInvitations, setShowInvitations] = useState(
-        pendingInvitations.length > 0,
-    );
 
     if (!currentOrganization) {
         return null;
@@ -90,12 +79,6 @@ export default function Dashboard({
     return (
         <>
             <Head title="Dashboard" />
-            <PendingInvitationsModal
-                invitations={pendingInvitations}
-                open={pendingInvitations.length > 0 && showInvitations}
-                onOpenChange={setShowInvitations}
-            />
-
             <div className="workspace-page">
                 <div className="page-heading">
                     <p className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">

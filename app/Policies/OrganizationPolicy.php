@@ -45,8 +45,7 @@ class OrganizationPolicy
      */
     public function leave(User $user, Organization $organization): bool
     {
-        return ! $organization->is_personal
-            && $user->belongsToOrganization($organization)
+        return $user->belongsToOrganization($organization)
             && ! $user->ownsOrganization($organization);
     }
 
@@ -95,6 +94,6 @@ class OrganizationPolicy
      */
     public function delete(User $user, Organization $organization): bool
     {
-        return ! $organization->is_personal && $user->hasOrganizationPermission($organization, OrganizationPermission::DeleteOrganization);
+        return $user->hasOrganizationPermission($organization, OrganizationPermission::DeleteOrganization);
     }
 }

@@ -4,7 +4,6 @@ export type Organization = {
     id: number;
     name: string;
     slug: string;
-    isPersonal: boolean;
     role?: OrganizationRole;
     roleLabel?: string;
     isCurrent?: boolean;
@@ -32,9 +31,11 @@ export type OrganizationInvitationContext = {
     organizationName: string;
 };
 
-export type DashboardInvitation = {
+export type PendingInvitation = {
     code: string;
     inviterName: string;
+    roleLabel: string;
+    expiresAt: string | null;
     organization: {
         name: string;
         slug: string;

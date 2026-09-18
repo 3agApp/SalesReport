@@ -2,31 +2,29 @@
 
 namespace App\Http\Responses\Concerns;
 
-use App\Models\Organization;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
 
 trait RedirectsToCurrentOrganization
 {
+    /**
+     * Get the path to the redirect under the user's current organization, or to
+     * onboarding when the user does not belong to an organization yet.
+     */
     protected function redirectPathForCurrentOrganization(Request $request, string $redirect): string
-    {
-        $organization = $this->currentOrganization($request);
-
-        URL::defaults(['current_organization' => $organization->slug]);
-
-        return "/{$organization->slug}{$redirect}";
-    }
-
-    protected function currentOrganization(Request $request): Organization
     {
         $user = $request->user();
 
         abort_if(! $user, 403);
 
-        $organization = $user->currentOrganization ?? $user->personalOrganization();
+        $organization = $user->currentOrganization ?? $user->fallbackOrganization();
 
-        abort_if(! $organization, 403);
+        if (! $organization) {
+            return route('onboarding', absolute: false);
+        }
 
-        return $organization;
+        URL::defaults(['current_organization' => $organization->slug]);
+
+        return "/{$organization->slug}{$redirect}";
     }
 }

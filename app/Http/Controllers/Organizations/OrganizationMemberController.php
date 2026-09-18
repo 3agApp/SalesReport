@@ -46,7 +46,7 @@ class OrganizationMemberController extends Controller
             ->delete();
 
         if ($user->isCurrentOrganization($organization)) {
-            $user->switchOrganization($user->personalOrganization());
+            $user->switchToFallbackOrganization($organization);
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Member removed.')]);

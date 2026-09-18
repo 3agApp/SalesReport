@@ -6,6 +6,7 @@ use App\Enums\OrganizationRole;
 use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -44,7 +45,7 @@ class UserFactory extends Factory
     public function configure(): static
     {
         return $this->afterCreating(function ($user) {
-            $organization = Organization::factory()->personal()->create([
+            $organization = Organization::factory()->create([
                 'name' => $user->name."'s Organization",
             ]);
 
@@ -54,6 +55,14 @@ class UserFactory extends Factory
 
             $user->switchOrganization($organization);
         });
+    }
+
+    /**
+     * Indicate that the user does not belong to an organization, as after registering.
+     */
+    public function withoutOrganization(): static
+    {
+        return $this->newInstance(['afterCreating' => new Collection]);
     }
 
     /**

@@ -23,8 +23,6 @@ class DatabaseSeeder extends Seeder
             'email' => 'test@example.com',
         ]);
 
-        Shop::factory()->count(2)->for($user->personalOrganization())->create();
-
         [$organizationName, $shops] = $this->localShops();
 
         $organization = Organization::factory()->create(['name' => $organizationName]);
