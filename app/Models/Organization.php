@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property string $name
  * @property string $slug
+ * @property string|null $timezone
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -26,7 +27,7 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, User> $members
  * @property-read Collection<int, Shop> $shops
  */
-#[Fillable(['name', 'slug'])]
+#[Fillable(['name', 'slug', 'timezone'])]
 class Organization extends Model
 {
     /** @use HasFactory<OrganizationFactory> */
@@ -83,6 +84,17 @@ class Organization extends Model
     public function memberships(): HasMany
     {
         return $this->hasMany(Membership::class);
+    }
+
+    /**
+     * Get the timezone the organization's reports are bounded by.
+     *
+     * Orders are stored in UTC; this only decides where a reporting day,
+     * month or quarter begins and ends.
+     */
+    public function reportingTimezone(): string
+    {
+        return $this->timezone ?? (string) config('app.reporting_timezone');
     }
 
     /**

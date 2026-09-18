@@ -56,14 +56,24 @@ class Order extends Model
     use HasFactory;
 
     /**
-     * The WooCommerce statuses that represent money the shop actually kept.
+     * The WooCommerce statuses where the money actually went through.
      *
-     * Cancelled, failed and pending orders are excluded: a bookkeeper's
-     * revenue figure should not count a sale that never completed.
+     * This is what a revenue figure counts by default. An on-hold order is
+     * money the shop hopes for rather than money it has taken, so it is
+     * reported separately instead of being blended in.
      *
      * @var array<string>
      */
-    public const array REVENUE_STATUSES = ['processing', 'completed', 'on-hold', 'refunded'];
+    public const array SETTLED_STATUSES = ['processing', 'completed'];
+
+    /**
+     * The statuses that mean an order is still alive, settled or not.
+     *
+     * Cancelled and failed orders are the ones left out.
+     *
+     * @var array<string>
+     */
+    public const array OPEN_STATUSES = ['processing', 'completed', 'on-hold', 'refunded', 'pending'];
 
     /**
      * Get the shop the order belongs to.
@@ -86,13 +96,13 @@ class Order extends Model
     }
 
     /**
-     * Scope the query to orders that count towards revenue.
+     * Scope the query to orders whose payment went through.
      *
      * @param  Builder<Order>  $query
      */
-    public function scopeCountingTowardsRevenue(Builder $query): void
+    public function scopeSettled(Builder $query): void
     {
-        $query->whereIn('status', self::REVENUE_STATUSES);
+        $query->whereIn('status', self::SETTLED_STATUSES);
     }
 
     /**

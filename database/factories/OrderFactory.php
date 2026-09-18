@@ -25,7 +25,7 @@ class OrderFactory extends Factory
             'shop_id' => Shop::factory(),
             'woo_id' => fake()->unique()->numberBetween(1, 999_999),
             'number' => fn (array $attributes) => (string) $attributes['woo_id'],
-            'status' => fake()->randomElement(Order::REVENUE_STATUSES),
+            'status' => fake()->randomElement(Order::SETTLED_STATUSES),
             'currency' => 'CHF',
             'total' => $total,
             'total_tax' => $tax,

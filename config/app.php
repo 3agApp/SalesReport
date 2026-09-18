@@ -69,6 +69,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Reporting Timezone
+    |--------------------------------------------------------------------------
+    |
+    | Orders are stored in UTC, but a bookkeeper's month starts and ends in
+    | their own timezone. This is the default an organization reports in until
+    | it picks its own under organization settings.
+    |
+    */
+
+    'reporting_timezone' => env('REPORTING_TIMEZONE', 'Europe/Zurich'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
     |

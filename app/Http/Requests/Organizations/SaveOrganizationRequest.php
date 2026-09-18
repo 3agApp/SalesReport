@@ -17,6 +17,9 @@ class SaveOrganizationRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255', new OrganizationName],
+            // Creation posts only a name; the timezone is picked later in
+            // settings, and falls back to the application default.
+            'timezone' => ['nullable', 'string', 'timezone'],
         ];
     }
 }

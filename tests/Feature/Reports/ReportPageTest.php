@@ -1,0 +1,124 @@
+<?php
+
+use App\Enums\OrganizationRole;
+use App\Models\Order;
+use App\Models\Organization;
+use App\Models\Shop;
+use App\Models\User;
+use Carbon\CarbonImmutable;
+use Inertia\Testing\AssertableInertia as Assert;
+
+test('members can see the reports page', function () {
+    $member = User::factory()->create();
+    $organization = Organization::factory()->create();
+    $organization->members()->attach($member, ['role' => OrganizationRole::Member->value]);
+
+    $shop = Shop::factory()->for($organization)->create();
+    Order::factory()->for($shop)->create(['status' => 'completed', 'total' => 100, 'refunded_total' => 0, 'placed_at' => now()]);
+
+    $this
+        ->actingAs($member)
+        ->get(route('reports.index', $organization))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('reports/index')
+            ->where('summary.orderCount', 1)
+            ->where('summary.netRevenue', 100)
+            ->has('filters.rangeLabel')
+            ->has('periods')
+        );
+});
+
+test('guests are redirected to the login page', function () {
+    $organization = Organization::factory()->create();
+
+    $this->get(route('reports.index', $organization))->assertRedirect(route('login'));
+});
+
+test('users cannot see the reports of an organization they do not belong to', function () {
+    $user = User::factory()->create();
+    $organization = Organization::factory()->create();
+
+    $this->actingAs($user)->get(route('reports.index', $organization))->assertForbidden();
+});
+
+test('a shop id from another organization cannot widen the report', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+
+    $ours = Shop::factory()->for($organization)->create();
+    $theirs = Shop::factory()->create();
+
+    Order::factory()->for($ours)->create(['status' => 'completed', 'total' => 10, 'refunded_total' => 0, 'placed_at' => now()]);
+    Order::factory()->for($theirs)->create(['status' => 'completed', 'total' => 9999, 'refunded_total' => 0, 'placed_at' => now()]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', [$organization, 'shops' => [$theirs->id]]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            // Falling back to every shop the viewer owns, never the other one.
+            ->where('summary.netRevenue', 10)
+        );
+});
+
+test('the heavy breakdowns are deferred until the page has painted', function () {
+    $user = User::factory()->create();
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', $user->currentOrganization))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('summary')
+            ->missing('series')
+            ->missing('topProducts')
+        );
+});
+
+test('a custom range is honoured', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $shop = Shop::factory()->for($organization)->create();
+
+    Order::factory()->for($shop)->create(['status' => 'completed', 'total' => 10, 'refunded_total' => 0, 'placed_at' => CarbonImmutable::parse('2026-03-10 12:00', 'Europe/Zurich')->utc()]);
+    Order::factory()->for($shop)->create(['status' => 'completed', 'total' => 20, 'refunded_total' => 0, 'placed_at' => CarbonImmutable::parse('2026-05-10 12:00', 'Europe/Zurich')->utc()]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', [$organization, 'period' => 'custom', 'from' => '2026-03-01', 'to' => '2026-03-31']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('summary.netRevenue', 10));
+});
+
+test('a malformed date is rejected rather than silently ignored', function () {
+    $user = User::factory()->create();
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', [$user->currentOrganization, 'period' => 'custom', 'from' => 'whenever']))
+        ->assertSessionHasErrors('from');
+});
+
+test('the organization timezone decides where a month ends', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $organization->update(['timezone' => 'Europe/Zurich']);
+
+    $shop = Shop::factory()->for($organization)->create();
+
+    Order::factory()->for($shop)->create([
+        'status' => 'completed', 'total' => 25, 'refunded_total' => 0,
+        'placed_at' => CarbonImmutable::parse('2026-04-01 00:30', 'Europe/Zurich')->utc(),
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', [$organization, 'period' => 'custom', 'from' => '2026-03-01', 'to' => '2026-03-31']))
+        ->assertInertia(fn (Assert $page) => $page->where('summary.netRevenue', 0));
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', [$organization, 'period' => 'custom', 'from' => '2026-04-01', 'to' => '2026-04-30']))
+        ->assertInertia(fn (Assert $page) => $page->where('summary.netRevenue', 25));
+});

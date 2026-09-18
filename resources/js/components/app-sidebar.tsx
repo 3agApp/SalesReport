@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid, Mail, Settings2, Store } from 'lucide-react';
+import { ChartColumn, LayoutGrid, Mail, Settings2, Store } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -16,6 +16,7 @@ import {
 import { dashboard, onboarding } from '@/routes';
 import { index as invitationsIndex } from '@/routes/invitations';
 import { edit as editOrganization } from '@/routes/organizations';
+import { index as reportsIndex } from '@/routes/reports';
 import { index as shopsIndex } from '@/routes/shops';
 import type { NavItem } from '@/types';
 
@@ -35,6 +36,11 @@ export function AppSidebar() {
 
     if (currentOrganization) {
         mainNavItems.push(
+            {
+                title: 'Reports',
+                href: reportsIndex(currentOrganization.slug),
+                icon: ChartColumn,
+            },
             {
                 title: 'Shops',
                 href: shopsIndex(currentOrganization.slug),

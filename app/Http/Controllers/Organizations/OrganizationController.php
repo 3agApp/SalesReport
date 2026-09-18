@@ -10,6 +10,7 @@ use App\Http\Requests\Organizations\SaveOrganizationRequest;
 use App\Models\Membership;
 use App\Models\Organization;
 use App\Models\User;
+use DateTimeZone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -55,6 +56,7 @@ class OrganizationController extends Controller
                 'id' => $organization->id,
                 'name' => $organization->name,
                 'slug' => $organization->slug,
+                'timezone' => $organization->reportingTimezone(),
             ],
             'members' => $organization->members()->get()->map(function (User $member) {
                 /** @var Membership $membership */
@@ -81,6 +83,12 @@ class OrganizationController extends Controller
                 ]),
             'permissions' => $user->toOrganizationPermissions($organization),
             'availableRoles' => OrganizationRole::assignable(),
+            'timezones' => collect(DateTimeZone::listIdentifiers())
+                ->map(fn (string $timezone) => [
+                    'value' => $timezone,
+                    'label' => str_replace('_', ' ', $timezone),
+                ])
+                ->values(),
         ]);
     }
 
@@ -94,7 +102,10 @@ class OrganizationController extends Controller
         $organization = DB::transaction(function () use ($request, $organization) {
             $organization = Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();
 
-            $organization->update(['name' => $request->validated('name')]);
+            $organization->update(array_filter([
+                'name' => $request->validated('name'),
+                'timezone' => $request->validated('timezone'),
+            ], fn (mixed $value) => $value !== null));
 
             return $organization;
         });

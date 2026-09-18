@@ -95,6 +95,10 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.87 0 0);
+
+    /* Report charts: one validated blue, stepped per mode. */
+    --viz-series: #2a78d6;
+    --viz-series-fill: #9ec5f4;
 }
 
 .dark {
@@ -130,6 +134,9 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(0.269 0 0);
     --sidebar-ring: oklch(0.439 0 0);
+
+    --viz-series: #3987e5;
+    --viz-series-fill: #256abf;
 }
 
 @layer base {
