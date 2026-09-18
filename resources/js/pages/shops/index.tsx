@@ -120,12 +120,13 @@ export default function ShopsIndex({
         <>
             <Head title="Shops" />
 
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
+            <div className="workspace-page">
                 <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="space-y-0.5">
-                        <h1 className="text-xl font-semibold tracking-tight">
-                            Shops
-                        </h1>
+                    <div className="page-heading">
+                        <p className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
+                            Organization shops
+                        </p>
+                        <h1 className="page-title">Shops</h1>
                         <p className="text-muted-foreground text-sm">
                             The WooCommerce stores {currentOrganization.name}{' '}
                             reports on.
@@ -142,7 +143,7 @@ export default function ShopsIndex({
                     ) : null}
                 </div>
 
-                <div className="border-sidebar-border/70 dark:border-sidebar-border flex flex-col rounded-xl border">
+                <div className="workspace-table">
                     <div className="flex flex-col gap-2 border-b p-4 sm:flex-row sm:items-center">
                         <div className="relative w-full sm:max-w-xs">
                             <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
@@ -174,7 +175,7 @@ export default function ShopsIndex({
                         <Table>
                             <TableHeader>
                                 <TableRow className="hover:bg-transparent">
-                                    <TableHead className="pl-4">Shop</TableHead>
+                                    <TableHead className="pl-6">Shop</TableHead>
                                     <TableHead>Platform</TableHead>
                                     <TableHead className="hidden md:table-cell">
                                         API key
@@ -183,7 +184,7 @@ export default function ShopsIndex({
                                         Updated
                                     </TableHead>
                                     {canManageShops ? (
-                                        <TableHead className="w-12 pr-4">
+                                        <TableHead className="w-12 pr-6">
                                             <span className="sr-only">
                                                 Actions
                                             </span>
@@ -197,7 +198,7 @@ export default function ShopsIndex({
                                         key={shop.id}
                                         data-test="shop-row"
                                     >
-                                        <TableCell className="pl-4">
+                                        <TableCell className="pl-6">
                                             <div className="flex items-center gap-3">
                                                 <div className="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-md">
                                                     <Store className="size-4" />
@@ -230,7 +231,7 @@ export default function ShopsIndex({
                                             {shop.updatedAtDiff}
                                         </TableCell>
                                         {canManageShops ? (
-                                            <TableCell className="pr-4 text-right">
+                                            <TableCell className="pr-6 text-right">
                                                 <DropdownMenu modal={false}>
                                                     <DropdownMenuTrigger
                                                         asChild

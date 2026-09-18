@@ -59,7 +59,7 @@ export default function InviteMemberModal({
                         <>
                             <DialogHeader>
                                 <DialogTitle>
-                                    Invite a organization member
+                                    Invite an organization member
                                 </DialogTitle>
                                 <DialogDescription>
                                     Send an invitation to join this

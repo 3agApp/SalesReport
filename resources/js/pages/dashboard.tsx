@@ -1,10 +1,10 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import type { LucideIcon } from 'lucide-react';
-import { ArrowRight, ExternalLink, Store, Users } from 'lucide-react';
+import { ExternalLink, Store } from 'lucide-react';
 import { useState } from 'react';
 import PendingInvitationsModal from '@/components/pending-invitations-modal';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
+import { edit as editOrganization } from '@/routes/organizations';
 import { index as shopsIndex } from '@/routes/shops';
 import type { DashboardInvitation, OrganizationPermissions } from '@/types';
 
@@ -27,12 +27,33 @@ type Props = {
     pendingInvitations?: DashboardInvitation[];
 };
 
-type StatCard = {
+type Stat = {
     label: string;
-    value: string;
-    hint: string;
-    icon: LucideIcon;
+    value: number;
+    href: string;
+    testId: string;
 };
+
+/**
+ * One number and where to go to act on it. Every tile is a link, because a
+ * count you cannot click through to is a dead end.
+ */
+function StatTile({ stat }: { stat: Stat }) {
+    return (
+        <Link
+            href={stat.href}
+            data-test={stat.testId}
+            className="workspace-panel hover:border-primary/40 flex flex-col gap-2 px-6 py-5 transition-colors"
+        >
+            <span className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
+                {stat.label}
+            </span>
+            <span className="text-3xl font-semibold tabular-nums">
+                {stat.value}
+            </span>
+        </Link>
+    );
+}
 
 export default function Dashboard({
     stats,
@@ -49,18 +70,20 @@ export default function Dashboard({
         return null;
     }
 
-    const statCards: StatCard[] = [
+    const organizationSlug = currentOrganization.slug;
+
+    const tiles: Stat[] = [
         {
             label: 'Connected shops',
-            value: stats.shops.toLocaleString(),
-            hint: 'WooCommerce stores reporting in',
-            icon: Store,
+            value: stats.shops,
+            href: shopsIndex(organizationSlug).url,
+            testId: 'dashboard-shops',
         },
         {
             label: 'Members',
-            value: stats.members.toLocaleString(),
-            hint: `People in ${currentOrganization.name}`,
-            icon: Users,
+            value: stats.members,
+            href: editOrganization(organizationSlug).url,
+            testId: 'dashboard-members',
         },
     ];
 
@@ -73,54 +96,42 @@ export default function Dashboard({
                 onOpenChange={setShowInvitations}
             />
 
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <div className="space-y-0.5">
-                    <h1 className="text-xl font-semibold tracking-tight">
-                        Dashboard
-                    </h1>
+            <div className="workspace-page">
+                <div className="page-heading">
+                    <p className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
+                        {currentOrganization.name}
+                    </p>
+                    <h1 className="page-title">Dashboard</h1>
                     <p className="text-muted-foreground text-sm">
-                        An overview of {currentOrganization.name}.
+                        Where {currentOrganization.name} stands today.
                     </p>
                 </div>
 
-                <div className="grid auto-rows-min gap-4 sm:grid-cols-2">
-                    {statCards.map((card) => (
-                        <div
-                            key={card.label}
-                            data-test="stat-card"
-                            className="border-sidebar-border/70 dark:border-sidebar-border rounded-xl border p-4"
-                        >
-                            <div className="text-muted-foreground flex items-center justify-between text-sm">
-                                <span>{card.label}</span>
-                                <card.icon className="size-4" />
-                            </div>
-                            <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
-                                {card.value}
-                            </div>
-                            <p className="text-muted-foreground mt-1 text-xs">
-                                {card.hint}
-                            </p>
-                        </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                    {tiles.map((stat) => (
+                        <StatTile key={stat.label} stat={stat} />
                     ))}
                 </div>
 
-                <div className="border-sidebar-border/70 dark:border-sidebar-border flex flex-col rounded-xl border">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4">
-                        <h2 className="font-medium">Recently updated shops</h2>
-                        <Button variant="ghost" size="sm" asChild>
-                            <Link href={shopsIndex(currentOrganization.slug)}>
-                                All shops <ArrowRight />
-                            </Link>
-                        </Button>
-                    </div>
+                {recentShops.length > 0 ? (
+                    <div className="workspace-panel">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-6 py-4">
+                            <h2 className="font-medium">
+                                Recently updated shops
+                            </h2>
+                            <Button variant="ghost" size="sm" asChild>
+                                <Link href={shopsIndex(organizationSlug)}>
+                                    All shops
+                                </Link>
+                            </Button>
+                        </div>
 
-                    {recentShops.length > 0 ? (
                         <ul className="divide-y">
                             {recentShops.map((shop) => (
                                 <li
                                     key={shop.id}
                                     data-test="recent-shop"
-                                    className="flex items-center gap-3 px-4 py-3"
+                                    className="flex items-center gap-3 px-6 py-4"
                                 >
                                     <div className="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-md">
                                         <Store className="size-4" />
@@ -145,33 +156,29 @@ export default function Dashboard({
                                 </li>
                             ))}
                         </ul>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-                            <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-                                <Store className="text-muted-foreground size-6" />
-                            </div>
-                            <div className="space-y-1">
-                                <h3 className="font-medium">No shops yet</h3>
-                                <p className="text-muted-foreground text-sm">
-                                    Connect a WooCommerce store to start
-                                    reporting on {currentOrganization.name}{' '}
-                                    sales.
-                                </p>
-                            </div>
-                            {permissions.canCreateShop ? (
-                                <Button size="sm" asChild>
-                                    <Link
-                                        href={shopsIndex(
-                                            currentOrganization.slug,
-                                        )}
-                                    >
-                                        Add a shop
-                                    </Link>
-                                </Button>
-                            ) : null}
+                    </div>
+                ) : (
+                    <div className="workspace-panel flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+                        <div className="bg-muted flex size-12 items-center justify-center rounded-full">
+                            <Store className="text-muted-foreground size-6" />
                         </div>
-                    )}
-                </div>
+                        <div className="space-y-1">
+                            <h2 className="font-medium">No shops yet</h2>
+                            <p className="text-muted-foreground max-w-md text-sm leading-relaxed">
+                                {permissions.canCreateShop
+                                    ? 'Connect your first WooCommerce store to start reporting on sales.'
+                                    : 'Shops connected to this organization will show up here.'}
+                            </p>
+                        </div>
+                        {permissions.canCreateShop ? (
+                            <Button size="sm" asChild>
+                                <Link href={shopsIndex(organizationSlug)}>
+                                    Add a shop
+                                </Link>
+                            </Button>
+                        ) : null}
+                    </div>
+                )}
             </div>
         </>
     );
