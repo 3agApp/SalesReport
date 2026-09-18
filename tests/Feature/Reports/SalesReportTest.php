@@ -199,10 +199,12 @@ test('a range mixing currencies says so instead of adding them together', functi
 test('period presets resolve in the given timezone', function () {
     $now = CarbonImmutable::parse('2026-03-15 08:00', 'UTC');
 
+    // A period still running stops today rather than running on into empty
+    // future days, so it can be compared like for like with the one before.
     [$from, $to] = ReportPeriod::ThisMonth->resolve('Europe/Zurich', $now);
 
     expect($from->toIso8601String())->toBe('2026-03-01T00:00:00+01:00')
-        ->and($to->toIso8601String())->toBe('2026-03-31T23:59:59+02:00');
+        ->and($to->toIso8601String())->toBe('2026-03-15T23:59:59+01:00');
 
     [$from, $to] = ReportPeriod::LastMonth->resolve('Europe/Zurich', $now);
 
@@ -212,5 +214,10 @@ test('period presets resolve in the given timezone', function () {
     [$from, $to] = ReportPeriod::ThisQuarter->resolve('Europe/Zurich', $now);
 
     expect($from->toDateString())->toBe('2026-01-01')
-        ->and($to->toDateString())->toBe('2026-03-31');
+        ->and($to->toDateString())->toBe('2026-03-15');
+
+    [$from, $to] = ReportPeriod::ThisYear->resolve('Europe/Zurich', $now);
+
+    expect($from->toDateString())->toBe('2026-01-01')
+        ->and($to->toDateString())->toBe('2026-03-15');
 });

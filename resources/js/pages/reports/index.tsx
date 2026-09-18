@@ -2,6 +2,8 @@ import { Deferred, Head, usePage } from '@inertiajs/react';
 import { TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import ReportChart from '@/components/report-chart';
+import ReportDelta from '@/components/report-delta';
+import ReportSparkline from '@/components/report-sparkline';
 import ReportFilterBar from '@/components/report-filter-bar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,6 +20,7 @@ import { formatMoney, formatNumber, MIXED_CURRENCY } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type {
+    ReportComparison,
     ReportFilters,
     ReportMeasure,
     ReportOption,
@@ -39,6 +42,7 @@ type Props = {
     byShop?: ReportShopRow[];
     topProducts?: ReportProductRow[];
     byStatus?: ReportStatusRow[];
+    comparison?: ReportComparison;
 };
 
 const measures: { value: ReportMeasure; label: string }[] = [
@@ -55,11 +59,13 @@ function Figure({
     label,
     value,
     hint,
+    delta,
     hero = false,
 }: {
     label: string;
     value: string;
     hint?: string;
+    delta?: React.ReactNode;
     hero?: boolean;
 }) {
     return (
@@ -85,6 +91,7 @@ function Figure({
             >
                 {value}
             </span>
+            {delta ?? null}
             {hint ? (
                 <span className="text-muted-foreground text-xs">{hint}</span>
             ) : null}
@@ -136,6 +143,7 @@ export default function ReportsIndex({
     byShop,
     topProducts,
     byStatus,
+    comparison,
 }: Props) {
     const { currentOrganization } = usePage().props;
     const [measure, setMeasure] = useState<ReportMeasure>('revenue');
@@ -145,6 +153,17 @@ export default function ReportsIndex({
     }
 
     const money = (value: number) => formatMoney(value, summary.currency);
+
+    // The comparison arrives after the first paint, so the tiles render
+    // without deltas and gain them a moment later rather than blocking.
+    const deltaFor = (key: string, invert = false) =>
+        comparison ? (
+            <ReportDelta
+                value={comparison.deltas[key] ?? null}
+                against={comparison.rangeLabel}
+                invert={invert}
+            />
+        ) : undefined;
 
     return (
         <>
@@ -169,6 +188,18 @@ export default function ReportsIndex({
                     statusOptions={statusOptions}
                 />
 
+                {comparison?.partial ? (
+                    <div className="workspace-panel flex items-start gap-3 border-amber-600/30 px-6 py-4 text-sm dark:border-amber-400/30">
+                        <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400" />
+                        <p className="text-muted-foreground">
+                            {comparison.rangeLabel} reaches back further than
+                            the orders imported so far, so the changes below may
+                            reflect when the sync started rather than how the
+                            shops traded.
+                        </p>
+                    </div>
+                ) : null}
+
                 {summary.currency === MIXED_CURRENCY ? (
                     <div className="workspace-panel flex items-start gap-3 border-amber-600/30 px-6 py-4 text-sm dark:border-amber-400/30">
                         <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400" />
@@ -185,17 +216,20 @@ export default function ReportsIndex({
                     <Figure
                         label="Net revenue"
                         value={money(summary.netRevenue)}
+                        delta={deltaFor('netRevenue')}
                         hint={`${money(summary.grossRevenue)} gross, less ${money(summary.refunded)} refunded`}
                         hero
                     />
                     <Figure
                         label="Orders"
                         value={formatNumber(summary.orderCount)}
+                        delta={deltaFor('orderCount')}
                         hint={`${formatNumber(summary.itemsSold)} items sold`}
                     />
                     <Figure
                         label="Average order"
                         value={money(summary.averageOrderValue)}
+                        delta={deltaFor('averageOrderValue')}
                     />
                     <Figure
                         label="Tax"
@@ -207,7 +241,11 @@ export default function ReportsIndex({
                 <div className="workspace-panel">
                     <PanelHeading
                         title="Over time"
-                        description={`Grouped by ${filters.interval}`}
+                        description={
+                            comparison
+                                ? `Grouped by ${filters.interval}, against ${comparison.rangeLabel}`
+                                : `Grouped by ${filters.interval}`
+                        }
                     >
                         <ToggleGroup
                             type="single"
@@ -241,6 +279,8 @@ export default function ReportsIndex({
                                 series={series ?? []}
                                 measure={measure}
                                 currency={summary.currency}
+                                previous={comparison?.series}
+                                previousLabel={comparison?.rangeLabel}
                             />
                         </Deferred>
                     </div>
@@ -340,7 +380,10 @@ function ShopTable({
                 <TableRow className="hover:bg-transparent">
                     <TableHead className="pl-6">Shop</TableHead>
                     <TableHead className="text-right">Orders</TableHead>
-                    <TableHead className="w-1/2 pr-6">Net revenue</TableHead>
+                    <TableHead className="hidden sm:table-cell">
+                        Trend
+                    </TableHead>
+                    <TableHead className="w-2/5 pr-6">Net revenue</TableHead>
                 </TableRow>
             </TableHeader>
             <TableBody>
@@ -351,6 +394,12 @@ function ShopTable({
                         </TableCell>
                         <TableCell className="text-muted-foreground text-right tabular-nums">
                             {formatNumber(row.orderCount)}
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                            <ReportSparkline
+                                values={row.trend}
+                                label={`${row.name} over the reported range`}
+                            />
                         </TableCell>
                         <TableCell className="pr-6">
                             <MagnitudeCell value={row.netRevenue} max={max}>

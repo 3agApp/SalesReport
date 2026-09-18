@@ -8,6 +8,7 @@ use App\Http\Requests\Reports\ReportFilterRequest;
 use App\Models\Order;
 use App\Models\Organization;
 use App\Models\Shop;
+use App\Services\Reports\SalesComparison;
 use App\Services\Reports\SalesReport;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -17,8 +18,11 @@ class ReportController extends Controller
     /**
      * Show the organization's sales report.
      */
-    public function __invoke(ReportFilterRequest $request, Organization $currentOrganization): Response
-    {
+    public function __invoke(
+        ReportFilterRequest $request,
+        Organization $currentOrganization,
+        SalesComparison $comparison,
+    ): Response {
         $filters = $request->filters();
         $report = new SalesReport($filters);
 
@@ -43,6 +47,7 @@ class ReportController extends Controller
             'byShop' => Inertia::defer(fn () => $report->byShop()),
             'topProducts' => Inertia::defer(fn () => $report->topProducts()),
             'byStatus' => Inertia::defer(fn () => $report->byStatus()),
+            'comparison' => Inertia::defer(fn () => $comparison->handle($filters, $report)->toArray()),
         ]);
     }
 }

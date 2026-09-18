@@ -37,6 +37,8 @@ test('the report renders its chart and breakdowns', function () {
         // The deferred panels land after the headline figures.
         ->assertSee('Toys Online')
         ->assertSee('Completed')
+        // The comparison against the period before arrives with them.
+        ->assertSee('Trend')
         ->assertNoJavaScriptErrors();
 });
 

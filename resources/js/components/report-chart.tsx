@@ -2,6 +2,7 @@ import {
     Area,
     AreaChart,
     CartesianGrid,
+    Legend,
     ResponsiveContainer,
     Tooltip,
     XAxis,
@@ -14,6 +15,9 @@ type Props = {
     series: ReportSeriesPoint[];
     measure: ReportMeasure;
     currency: string;
+    /** The same measure over the period before, aligned bucket for bucket. */
+    previous?: ReportSeriesPoint[];
+    previousLabel?: string;
 };
 
 const measureLabels: Record<ReportMeasure, string> = {
@@ -29,8 +33,23 @@ const measureLabels: Record<ReportMeasure, string> = {
  * would need a second y-axis and invite the reader to compare two lines that
  * are not comparable. Switching the measure keeps a single honest axis.
  */
-export default function ReportChart({ series, measure, currency }: Props) {
+export default function ReportChart({
+    series,
+    measure,
+    currency,
+    previous,
+    previousLabel,
+}: Props) {
     const isMoney = measure !== 'orders';
+    const comparing = Boolean(previous?.length);
+
+    // The two periods rarely have the same number of buckets (a 31 day month
+    // against a 30 day one), so they line up by position, not by date.
+    const data = series.map((point, index) => ({
+        ...point,
+        previous: previous?.[index]?.[measure] ?? null,
+        previousLabel: previous?.[index]?.label ?? null,
+    }));
 
     const formatValue = (value: number) =>
         isMoney ? formatMoney(value, currency) : formatNumber(value);
@@ -43,7 +62,7 @@ export default function ReportChart({ series, measure, currency }: Props) {
     return (
         <ResponsiveContainer width="100%" height={280}>
             <AreaChart
-                data={series}
+                data={data}
                 margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
             >
                 <defs>
@@ -95,7 +114,10 @@ export default function ReportChart({ series, measure, currency }: Props) {
                         }
 
                         const point = payload[0]
-                            .payload as unknown as ReportSeriesPoint;
+                            .payload as ReportSeriesPoint & {
+                            previous: number | null;
+                            previousLabel: string | null;
+                        };
 
                         return (
                             <div className="bg-popover text-popover-foreground rounded-md border px-3 py-2 text-xs shadow-md">
@@ -106,6 +128,14 @@ export default function ReportChart({ series, measure, currency }: Props) {
                                         {formatValue(point[measure])}
                                     </span>
                                 </p>
+                                {comparing && point.previous !== null ? (
+                                    <p className="text-muted-foreground">
+                                        {point.previousLabel ?? 'Previous'}:{' '}
+                                        <span className="font-medium tabular-nums">
+                                            {formatValue(point.previous)}
+                                        </span>
+                                    </p>
+                                ) : null}
                                 {measure !== 'orders' ? (
                                     <p className="text-muted-foreground">
                                         Orders:{' '}
@@ -118,6 +148,23 @@ export default function ReportChart({ series, measure, currency }: Props) {
                         );
                     }}
                 />
+                {/* The earlier period is context, not a rival series: it is
+                    drawn in the de-emphasis grey and dashed, so the current
+                    period stays the subject of the chart. */}
+                {comparing ? (
+                    <Area
+                        type="monotone"
+                        dataKey="previous"
+                        name={previousLabel ?? 'Previous period'}
+                        stroke="var(--muted-foreground)"
+                        strokeWidth={1.5}
+                        strokeDasharray="4 3"
+                        fill="none"
+                        dot={false}
+                        activeDot={false}
+                        connectNulls
+                    />
+                ) : null}
                 <Area
                     type="monotone"
                     dataKey={measure}
@@ -128,6 +175,17 @@ export default function ReportChart({ series, measure, currency }: Props) {
                     dot={false}
                     activeDot={{ r: 4, strokeWidth: 2, stroke: 'var(--card)' }}
                 />
+                {/* Two series always carry a legend, so identity never rests
+                    on colour alone. */}
+                {comparing ? (
+                    <Legend
+                        verticalAlign="top"
+                        align="right"
+                        height={28}
+                        iconType="plainline"
+                        wrapperStyle={{ fontSize: 12 }}
+                    />
+                ) : null}
             </AreaChart>
         </ResponsiveContainer>
     );

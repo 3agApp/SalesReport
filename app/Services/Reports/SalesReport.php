@@ -23,6 +23,16 @@ class SalesReport
      */
     private const int TOP_PRODUCTS = 10;
 
+    /**
+     * @var array<string, mixed>|null
+     */
+    private ?array $summary = null;
+
+    /**
+     * @var array<string, array{date: string, label: string, orders: int, revenue: float}>|null
+     */
+    private ?array $buckets = null;
+
     public function __construct(private ReportFilters $filters) {}
 
     /**
@@ -31,6 +41,29 @@ class SalesReport
      * @return array<string, mixed>
      */
     public function summary(): array
+    {
+        return $this->summary ??= $this->buildSummary();
+    }
+
+    /**
+     * Get the earliest order held for the shops in scope.
+     *
+     * A comparison reaching back before this is comparing against orders that
+     * were simply never imported, which is worth saying out loud.
+     */
+    public function earliestOrderAt(): ?CarbonImmutable
+    {
+        $earliest = Order::query()
+            ->whereIn('shop_id', $this->filters->shopIds)
+            ->min('placed_at');
+
+        return is_string($earliest) ? CarbonImmutable::parse($earliest, 'UTC') : null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildSummary(): array
     {
         $row = $this->orders()
             ->selectRaw('count(*) as order_count')
@@ -112,6 +145,9 @@ class SalesReport
     /**
      * Get the totals for each shop in scope, busiest first.
      *
+     * Each row carries its own small series, so the table can show which way a
+     * shop is heading without a second chart full of crossing lines.
+     *
      * @return array<int, array<string, mixed>>
      */
     public function byShop(): array
@@ -119,6 +155,8 @@ class SalesReport
         $names = Shop::query()
             ->whereIn('id', $this->filters->shopIds)
             ->pluck('name', 'id');
+
+        $trends = $this->revenueByShopOverTime();
 
         return $this->orders()
             ->select('shop_id')
@@ -132,10 +170,53 @@ class SalesReport
                 'name' => $names[$row->shop_id] ?? 'Unknown shop',
                 'orderCount' => (int) $row->order_count,
                 'netRevenue' => round((float) $row->net, 2),
+                'trend' => $trends[(int) $row->shop_id] ?? [],
             ])
             ->sortByDesc('netRevenue')
             ->values()
             ->toArray();
+    }
+
+    /**
+     * Get each shop's revenue per bucket, on the same buckets as the series.
+     *
+     * @return array<int, array<int, float>>
+     */
+    private function revenueByShopOverTime(): array
+    {
+        $interval = $this->filters->interval();
+        $buckets = $this->emptyBuckets();
+        $empty = array_fill(0, count($buckets), 0.0);
+        $positions = array_flip(array_keys($buckets));
+        $trends = [];
+
+        $rows = $this->orders()
+            ->select(['shop_id', 'placed_at', 'total', 'refunded_total'])
+            ->toBase()
+            ->cursor();
+
+        foreach ($rows as $row) {
+            if ($row->placed_at === null) {
+                continue;
+            }
+
+            $key = $interval
+                ->startOf(CarbonImmutable::parse($row->placed_at, 'UTC')->setTimezone($this->filters->timezone))
+                ->toDateString();
+
+            if (! isset($positions[$key])) {
+                continue;
+            }
+
+            $shopId = (int) $row->shop_id;
+            $trends[$shopId] ??= $empty;
+            $trends[$shopId][$positions[$key]] += (float) $row->total - (float) $row->refunded_total;
+        }
+
+        return array_map(
+            fn (array $values) => array_map(fn (float $value) => round($value, 2), $values),
+            $trends,
+        );
     }
 
     /**
@@ -262,6 +343,10 @@ class SalesReport
      */
     private function emptyBuckets(): array
     {
+        if ($this->buckets !== null) {
+            return $this->buckets;
+        }
+
         $interval = $this->filters->interval();
         $cursor = $interval->startOf($this->filters->from);
         $buckets = [];
@@ -277,7 +362,7 @@ class SalesReport
             $cursor = $interval->next($cursor);
         }
 
-        return $buckets;
+        return $this->buckets = $buckets;
     }
 
     /**

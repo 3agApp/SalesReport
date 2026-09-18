@@ -41,6 +41,64 @@ readonly class ReportFilters
     }
 
     /**
+     * Get the same filters over the period immediately before this one.
+     *
+     * Calendar periods step back a calendar step rather than a fixed number of
+     * days, so a part-finished month compares against the same days of the
+     * month before rather than against a full one. Rolling and custom ranges
+     * shift back by their own length.
+     */
+    public function forPreviousPeriod(): self
+    {
+        [$from, $to] = match ($this->period) {
+            ReportPeriod::Today, ReportPeriod::Yesterday => [$this->from->subDay(), $this->to->subDay()],
+            ReportPeriod::ThisMonth, ReportPeriod::LastMonth => $this->shiftMonths(1),
+            ReportPeriod::ThisQuarter, ReportPeriod::LastQuarter => $this->shiftMonths(3),
+            ReportPeriod::ThisYear, ReportPeriod::LastYear => $this->shiftMonths(12),
+            default => $this->shiftByLength(),
+        };
+
+        return new self(
+            period: ReportPeriod::Custom,
+            from: $from,
+            to: $to,
+            timezone: $this->timezone,
+            shopIds: $this->shopIds,
+            statuses: $this->statuses,
+        );
+    }
+
+    /**
+     * Step the range back by whole months.
+     *
+     * A range that ended on the last day of its month keeps ending on the last
+     * day, so a 31 day month never compares against 30 days of a shorter one.
+     *
+     * @return array{0: CarbonImmutable, 1: CarbonImmutable}
+     */
+    private function shiftMonths(int $months): array
+    {
+        $endsOnLastDay = $this->to->isSameDay($this->to->endOfMonth());
+
+        $from = $this->from->subMonthsNoOverflow($months);
+        $to = $this->to->subMonthsNoOverflow($months);
+
+        return [$from, $endsOnLastDay ? $to->endOfMonth() : $to];
+    }
+
+    /**
+     * Step the range back by its own length, leaving no gap between the two.
+     *
+     * @return array{0: CarbonImmutable, 1: CarbonImmutable}
+     */
+    private function shiftByLength(): array
+    {
+        $days = (int) $this->from->startOfDay()->diffInDays($this->to->startOfDay()) + 1;
+
+        return [$this->from->subDays($days), $this->to->subDays($days)];
+    }
+
+    /**
      * Get the bucket size the time series should use.
      */
     public function interval(): ReportInterval

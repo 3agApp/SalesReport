@@ -50,6 +50,10 @@ enum ReportPeriod: string
      * The end is the last moment of the final day rather than midnight, so a
      * range never silently drops the orders placed on its closing day.
      *
+     * A period still running ends today rather than at the end of the month,
+     * quarter or year. Carrying empty future days would flatten the chart and,
+     * worse, make a part-finished month look like a fall against a whole one.
+     *
      * @return array{0: CarbonImmutable, 1: CarbonImmutable}
      */
     public function resolve(string $timezone, ?CarbonImmutable $now = null): array
@@ -59,11 +63,11 @@ enum ReportPeriod: string
         return match ($this) {
             self::Today => [$now->startOfDay(), $now->endOfDay()],
             self::Yesterday => [$now->subDay()->startOfDay(), $now->subDay()->endOfDay()],
-            self::ThisMonth => [$now->startOfMonth(), $now->endOfMonth()],
+            self::ThisMonth => [$now->startOfMonth(), $now->endOfDay()],
             self::LastMonth => [$now->subMonthNoOverflow()->startOfMonth(), $now->subMonthNoOverflow()->endOfMonth()],
-            self::ThisQuarter => [$now->startOfQuarter(), $now->endOfQuarter()],
+            self::ThisQuarter => [$now->startOfQuarter(), $now->endOfDay()],
             self::LastQuarter => [$now->subQuarterNoOverflow()->startOfQuarter(), $now->subQuarterNoOverflow()->endOfQuarter()],
-            self::ThisYear => [$now->startOfYear(), $now->endOfYear()],
+            self::ThisYear => [$now->startOfYear(), $now->endOfDay()],
             self::LastYear => [$now->subYearNoOverflow()->startOfYear(), $now->subYearNoOverflow()->endOfYear()],
             self::Last30Days => [$now->subDays(29)->startOfDay(), $now->endOfDay()],
             self::Last12Months => [$now->subMonthsNoOverflow(11)->startOfMonth(), $now->endOfDay()],

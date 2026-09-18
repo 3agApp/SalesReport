@@ -50,6 +50,18 @@ export type ReportShopRow = {
     name: string;
     orderCount: number;
     netRevenue: number;
+    /** Net revenue per bucket, on the same buckets as the main series. */
+    trend: number[];
+};
+
+export type ReportComparison = {
+    rangeLabel: string;
+    summary: ReportSummary;
+    series: ReportSeriesPoint[];
+    /** Percentage change per figure; null where there was nothing to compare against. */
+    deltas: Record<string, number | null>;
+    /** True when the earlier period reaches back before the imported history. */
+    partial: boolean;
 };
 
 export type ReportProductRow = {
