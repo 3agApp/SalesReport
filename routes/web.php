@@ -5,6 +5,7 @@ use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\Organizations\OrganizationInvitationController;
 use App\Http\Controllers\Shops\ShopConnectionController;
 use App\Http\Controllers\Shops\ShopController;
+use App\Http\Controllers\Shops\ShopOrderSyncController;
 use App\Http\Middleware\EnsureOrganizationMembership;
 use Illuminate\Support\Facades\Route;
 
@@ -28,6 +29,10 @@ Route::prefix('{current_organization}')
         Route::post('shops/{shop}/connection', ShopConnectionController::class)
             ->middleware('throttle:10,1')
             ->name('shops.connection.test');
+
+        Route::post('shops/{shop}/sync', ShopOrderSyncController::class)
+            ->middleware('throttle:10,1')
+            ->name('shops.sync.store');
     });
 
 Route::get('invitations', [OrganizationInvitationController::class, 'index'])

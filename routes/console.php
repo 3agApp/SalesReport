@@ -15,3 +15,9 @@ Schedule::command('shops:check-connections')
     ->withoutOverlapping()
     ->onOneServer()
     ->description('Re-check WooCommerce shop connections');
+
+Schedule::command('shops:sync-orders')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->description('Sync WooCommerce orders');

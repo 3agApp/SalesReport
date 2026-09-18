@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Shops;
 
 use App\Enums\ShopPlatform;
+use App\Enums\ShopSyncStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Shops\SaveShopRequest;
 use App\Jobs\Shops\CheckShopConnection;
@@ -31,6 +32,8 @@ class ShopController extends Controller
         $search = $request->string('search')->trim()->toString();
 
         $shops = $currentOrganization->shops()
+            ->with('syncState')
+            ->withCount('orders')
             ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
                 ->where('name', 'like', "%{$search}%")
                 ->orWhere('url', 'like', "%{$search}%")))
@@ -106,12 +109,32 @@ class ShopController extends Controller
     }
 
     /**
+     * Build the payload for a shop's order sync.
+     *
+     * @return array{status: string, statusLabel: string, tone: string, message: string|null, checkedAtDiff: string|null, orderCount: int}
+     */
+    private function toSyncPayload(Shop $shop): array
+    {
+        $state = $shop->syncState;
+        $status = $state === null ? ShopSyncStatus::Pending : $state->status;
+
+        return [
+            'status' => $status->value,
+            'statusLabel' => $status->label(),
+            'tone' => $status->tone(),
+            'message' => $state?->last_error,
+            'checkedAtDiff' => $state?->last_finished_at?->diffForHumans(),
+            'orderCount' => (int) ($shop->orders_count ?? 0),
+        ];
+    }
+
+    /**
      * Build the payload for a shop.
      *
      * Credentials are write-only, so only a masked hint of the consumer key
      * ever reaches the browser.
      *
-     * @return array{id: int, name: string, url: string, host: string, platform: string, platformLabel: string, consumerKeyHint: string, updatedAtDiff: string|null, connection: array{status: string, statusLabel: string, tone: string, message: string|null, checkedAtDiff: string|null}}
+     * @return array<string, mixed>
      */
     private function toShopPayload(Shop $shop): array
     {
@@ -131,6 +154,7 @@ class ShopController extends Controller
                 'message' => $shop->connection_message,
                 'checkedAtDiff' => $shop->connection_checked_at?->diffForHumans(),
             ],
+            'sync' => $this->toSyncPayload($shop),
         ];
     }
 }

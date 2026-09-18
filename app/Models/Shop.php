@@ -9,9 +9,12 @@ use Database\Factories\ShopFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
@@ -30,6 +33,9 @@ use Illuminate\Support\Str;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Organization $organization
+ * @property-read int|null $orders_count
+ * @property-read ShopSyncState|null $syncState
+ * @property-read Collection<int, Order> $orders
  */
 #[Fillable(['name', 'url', 'platform', 'consumer_key', 'consumer_secret'])]
 #[Hidden(['consumer_key', 'consumer_secret'])]
@@ -67,6 +73,34 @@ class Shop extends Model
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    /**
+     * Get the orders imported from the shop.
+     *
+     * @return HasMany<Order, $this>
+     */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
+    /**
+     * Get where the shop's order sync has got to.
+     *
+     * @return HasOne<ShopSyncState, $this>
+     */
+    public function syncState(): HasOne
+    {
+        return $this->hasOne(ShopSyncState::class);
+    }
+
+    /**
+     * Get the shop's sync state, creating it the first time it is needed.
+     */
+    public function syncStateOrCreate(): ShopSyncState
+    {
+        return $this->syncState()->firstOrCreate([]);
     }
 
     /**

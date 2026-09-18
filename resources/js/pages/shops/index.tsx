@@ -8,6 +8,7 @@ import {
     Pencil,
     PlugZap,
     Plus,
+    RefreshCw,
     Search,
     Store,
     Trash2,
@@ -15,8 +16,11 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import DeleteShopModal from '@/components/delete-shop-modal';
-import ShopConnectionBadge from '@/components/shop-connection-badge';
 import ShopFormModal from '@/components/shop-form-modal';
+import StatusBadge, {
+    statusToneText,
+    StatusTooltip,
+} from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,9 +39,11 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import { index as shopsIndex } from '@/routes/shops';
 import { test as testShopConnection } from '@/routes/shops/connection';
+import { store as syncShopOrders } from '@/routes/shops/sync';
 import type {
     OrganizationPermissions,
     Paginated,
@@ -113,6 +119,14 @@ export default function ShopsIndex({
     const openEditForm = (shop: Shop) => {
         setEditingShop(shop);
         setFormOpen(true);
+    };
+
+    const syncOrders = (shop: Shop) => {
+        router.post(
+            syncShopOrders([currentOrganization.slug, shop.id]).url,
+            {},
+            { preserveScroll: true, preserveState: true },
+        );
     };
 
     const testConnection = (shop: Shop) => {
@@ -193,14 +207,17 @@ export default function ShopsIndex({
                             <TableHeader>
                                 <TableRow className="hover:bg-transparent">
                                     <TableHead className="pl-6">Shop</TableHead>
-                                    <TableHead className="hidden sm:table-cell">
+                                    <TableHead className="hidden lg:table-cell">
                                         Platform
                                     </TableHead>
                                     <TableHead>Connection</TableHead>
-                                    <TableHead className="hidden lg:table-cell">
-                                        API key
+                                    <TableHead className="hidden sm:table-cell">
+                                        Orders
                                     </TableHead>
                                     <TableHead className="hidden xl:table-cell">
+                                        API key
+                                    </TableHead>
+                                    <TableHead className="hidden 2xl:table-cell">
                                         Updated
                                     </TableHead>
                                     {canManageShops ? (
@@ -239,23 +256,52 @@ export default function ShopsIndex({
                                                 </div>
                                             </div>
                                         </TableCell>
-                                        <TableCell className="hidden sm:table-cell">
+                                        <TableCell className="hidden lg:table-cell">
                                             <Badge variant="secondary">
                                                 {shop.platformLabel}
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            <ShopConnectionBadge
-                                                connection={shop.connection}
-                                                testing={
-                                                    testingShopId === shop.id
-                                                }
+                                            <StatusBadge
+                                                indicator={shop.connection}
+                                                testId="shop-connection"
+                                                busy={testingShopId === shop.id}
+                                                busyLabel="Testing…"
                                             />
                                         </TableCell>
-                                        <TableCell className="text-muted-foreground hidden font-mono text-xs lg:table-cell">
+                                        <TableCell
+                                            className="hidden sm:table-cell"
+                                            data-test="shop-orders"
+                                        >
+                                            <div className="font-medium tabular-nums">
+                                                {shop.sync.orderCount.toLocaleString()}
+                                            </div>
+                                            <StatusTooltip
+                                                indicator={shop.sync}
+                                            >
+                                                <span
+                                                    data-test="shop-sync"
+                                                    data-status={
+                                                        shop.sync.status
+                                                    }
+                                                    className={cn(
+                                                        'text-xs',
+                                                        statusToneText[
+                                                            shop.sync.tone
+                                                        ],
+                                                    )}
+                                                >
+                                                    {shop.sync.status ===
+                                                    'synced'
+                                                        ? `synced ${shop.sync.checkedAtDiff ?? ''}`.trim()
+                                                        : shop.sync.statusLabel}
+                                                </span>
+                                            </StatusTooltip>
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground hidden font-mono text-xs xl:table-cell">
                                             {shop.consumerKeyHint}
                                         </TableCell>
-                                        <TableCell className="text-muted-foreground hidden xl:table-cell">
+                                        <TableCell className="text-muted-foreground hidden 2xl:table-cell">
                                             {shop.updatedAtDiff}
                                         </TableCell>
                                         {canManageShops ? (
@@ -283,6 +329,17 @@ export default function ShopsIndex({
                                                     >
                                                         {permissions.canUpdateShop ? (
                                                             <>
+                                                                <DropdownMenuItem
+                                                                    data-test="shop-sync-orders"
+                                                                    onSelect={() =>
+                                                                        syncOrders(
+                                                                            shop,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <RefreshCw />{' '}
+                                                                    Sync orders
+                                                                </DropdownMenuItem>
                                                                 <DropdownMenuItem
                                                                     data-test="shop-test-connection"
                                                                     disabled={

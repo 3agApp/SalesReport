@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Order;
 use App\Models\Organization;
 use App\Models\Shop;
 use Illuminate\Http\Request;
@@ -22,6 +23,9 @@ class DashboardController extends Controller
                 'shops' => $currentOrganization->shops()->count(),
                 'members' => $currentOrganization->members()->count(),
                 'shopsNeedingAttention' => $currentOrganization->shops()->needingAttention()->count(),
+                'orders' => Order::query()
+                    ->whereIn('shop_id', $currentOrganization->shops()->select('id'))
+                    ->count(),
             ],
             'recentShops' => $currentOrganization->shops()
                 ->latest('updated_at')

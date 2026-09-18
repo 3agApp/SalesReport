@@ -45,6 +45,14 @@ class ShopPolicy
     }
 
     /**
+     * Determine whether the user can sync the shop's orders.
+     */
+    public function syncOrders(User $user, Shop $shop): bool
+    {
+        return $user->hasOrganizationPermission($shop->organization, OrganizationPermission::UpdateShop);
+    }
+
+    /**
      * Determine whether the user can delete the shop.
      */
     public function delete(User $user, Shop $shop): bool

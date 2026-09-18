@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 import { edit as editOrganization } from '@/routes/organizations';
 import { index as shopsIndex } from '@/routes/shops';
-import ShopConnectionBadge from '@/components/shop-connection-badge';
+import StatusBadge from '@/components/status-badge';
 import { cn } from '@/lib/utils';
 import type { OrganizationPermissions, ShopConnection } from '@/types';
 
@@ -23,6 +23,7 @@ type Props = {
         shops: number;
         members: number;
         shopsNeedingAttention: number;
+        orders: number;
     };
     recentShops: RecentShop[];
     permissions: OrganizationPermissions;
@@ -88,6 +89,12 @@ export default function Dashboard({ stats, recentShops, permissions }: Props) {
             testId: 'dashboard-members',
         },
         {
+            label: 'Orders synced',
+            value: stats.orders,
+            href: shopsIndex(organizationSlug).url,
+            testId: 'dashboard-orders',
+        },
+        {
             label: 'Needs attention',
             value: stats.shopsNeedingAttention,
             href: shopsIndex(organizationSlug).url,
@@ -110,7 +117,7 @@ export default function Dashboard({ stats, recentShops, permissions }: Props) {
                     </p>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     {tiles.map((stat) => (
                         <StatTile key={stat.label} stat={stat} />
                     ))}
@@ -153,9 +160,7 @@ export default function Dashboard({ stats, recentShops, permissions }: Props) {
                                             <ExternalLink className="size-3" />
                                         </a>
                                     </div>
-                                    <ShopConnectionBadge
-                                        connection={shop.connection}
-                                    />
+                                    <StatusBadge indicator={shop.connection} />
                                     <div className="text-muted-foreground hidden text-xs sm:block">
                                         {shop.updatedAtDiff}
                                     </div>

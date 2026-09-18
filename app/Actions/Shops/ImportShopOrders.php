@@ -1,0 +1,300 @@
+<?php
+
+namespace App\Actions\Shops;
+
+use App\Data\ShopSyncResult;
+use App\Enums\ShopSyncStatus;
+use App\Models\Shop;
+use App\Models\ShopSyncState;
+use App\Services\WooCommerce\OrderImporter;
+use App\Services\WooCommerce\WooCommerceClient;
+use Carbon\CarbonImmutable;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Str;
+use RuntimeException;
+
+/**
+ * Pulls a shop's orders into our own tables.
+ *
+ * Two passes share the work. The backfill walks the shop's history from the
+ * oldest order forward, one page at a time, remembering where it got to. Once
+ * that finishes, every later run asks only for orders modified since the last
+ * one, which is what brings status changes and refunds up to date rather than
+ * only new orders.
+ */
+class ImportShopOrders
+{
+    public function __construct(
+        private WooCommerceClient $client,
+        private OrderImporter $importer,
+    ) {}
+
+    /**
+     * Sync a shop's orders, picking up wherever the last run stopped.
+     */
+    public function handle(Shop $shop): ShopSyncResult
+    {
+        $state = $shop->syncStateOrCreate();
+        $startedAt = now();
+
+        $state->update([
+            'status' => $state->hasBackfilled() ? ShopSyncStatus::Syncing : ShopSyncStatus::Backfilling,
+            'last_error' => null,
+        ]);
+
+        try {
+            $result = $state->hasBackfilled()
+                ? $this->runIncrementalPass($shop, $state, $startedAt)
+                : $this->runBackfillPass($shop, $state);
+        } catch (ConnectionException|RuntimeException $exception) {
+            // An unreachable shop or an error response is an outcome to record,
+            // not a bug to fail the job over. Anything else is left to bubble.
+            return $this->recordFailure($state, $exception->getMessage());
+        }
+
+        $state->update([
+            'status' => $result->status,
+            'last_finished_at' => now(),
+        ]);
+
+        return $result;
+    }
+
+    /**
+     * Walk the shop's order history from the oldest order forward.
+     */
+    private function runBackfillPass(Shop $shop, ShopSyncState $state): ShopSyncResult
+    {
+        $cursor = $state->backfill_cursor;
+        $imported = 0;
+        $pages = 0;
+
+        while ($pages < $this->maxPages()) {
+            $query = [
+                'orderby' => 'date',
+                'order' => 'asc',
+                ...$this->baseQuery(),
+            ];
+
+            if ($cursor instanceof CarbonImmutable) {
+                // Overlapping by a second is harmless because orders are
+                // upserted, whereas skipping one would lose it for good.
+                $query['after'] = $cursor->subSecond()->toIso8601String();
+            }
+
+            $payloads = $this->fetchPage($shop, $query);
+            $pages++;
+
+            if ($payloads === []) {
+                return $this->completeBackfill($state, $imported, $pages);
+            }
+
+            $imported += $this->importer->import($shop, $payloads);
+            $furthest = $this->furthestTimestamp($payloads, 'date_created_gmt');
+
+            if ($cursor instanceof CarbonImmutable && $furthest !== null && $furthest->lessThanOrEqualTo($cursor)) {
+                // A whole page sharing one second would leave the cursor
+                // standing still and the backfill looping. Stop and say so
+                // rather than spin or silently skip the orders involved.
+                throw new RuntimeException(
+                    'The import stalled: a full page of orders shares the timestamp '.$cursor->toDateTimeString().'.'
+                );
+            }
+
+            $cursor = $furthest ?? $cursor;
+            $state->update(['backfill_cursor' => $cursor]);
+
+            if (count($payloads) < $this->pageSize()) {
+                return $this->completeBackfill($state, $imported, $pages);
+            }
+        }
+
+        return new ShopSyncResult(
+            status: ShopSyncStatus::Backfilling,
+            importedCount: $imported,
+            pagesFetched: $pages,
+            hasMore: true,
+            message: 'Imported '.$imported.' more historical '.Str::plural('order', $imported).'.',
+        );
+    }
+
+    /**
+     * Fetch everything that changed since the last run.
+     */
+    private function runIncrementalPass(Shop $shop, ShopSyncState $state, CarbonImmutable $startedAt): ShopSyncResult
+    {
+        $since = ($state->last_synced_at ?? $state->backfill_completed_at ?? $startedAt)
+            ->subMinutes($this->overlapMinutes());
+
+        $imported = 0;
+        $pages = 0;
+        $caughtUp = false;
+        $furthestModified = null;
+
+        while ($pages < $this->maxPages()) {
+            $payloads = $this->fetchPage($shop, [
+                'orderby' => 'modified',
+                'order' => 'asc',
+                'modified_after' => $since->utc()->toIso8601String(),
+                'page' => $pages + 1,
+                ...$this->baseQuery(),
+            ]);
+
+            $pages++;
+
+            if ($payloads === []) {
+                $caughtUp = true;
+
+                break;
+            }
+
+            $imported += $this->importer->import($shop, $payloads);
+            $furthestModified = $this->furthestTimestamp($payloads, 'date_modified_gmt') ?? $furthestModified;
+
+            if (count($payloads) < $this->pageSize()) {
+                $caughtUp = true;
+
+                break;
+            }
+        }
+
+        if ($caughtUp) {
+            // The high-water mark is when the run started, not when it ended,
+            // so an order modified during the run is picked up next time.
+            $state->update(['last_synced_at' => $startedAt]);
+        } elseif ($furthestModified !== null) {
+            // The run hit its page limit with more still to come. Moving the
+            // mark to the last order actually seen lets the next run carry on
+            // from there; moving it to now would lose everything after it.
+            $state->update(['last_synced_at' => $furthestModified]);
+        }
+
+        return new ShopSyncResult(
+            status: $caughtUp ? ShopSyncStatus::Synced : ShopSyncStatus::Syncing,
+            importedCount: $imported,
+            pagesFetched: $pages,
+            hasMore: ! $caughtUp,
+            message: $imported === 0
+                ? 'Already up to date.'
+                : 'Updated '.$imported.' '.Str::plural('order', $imported).'.',
+        );
+    }
+
+    /**
+     * Mark the historical import as done and hand over to the incremental pass.
+     */
+    private function completeBackfill(ShopSyncState $state, int $imported, int $pages): ShopSyncResult
+    {
+        $state->update([
+            'backfill_completed_at' => now(),
+            'last_synced_at' => now(),
+        ]);
+
+        return new ShopSyncResult(
+            status: ShopSyncStatus::Synced,
+            importedCount: $imported,
+            pagesFetched: $pages,
+            message: 'Imported '.$imported.' historical '.Str::plural('order', $imported).'.',
+        );
+    }
+
+    /**
+     * Ask the shop for one page of orders.
+     *
+     * @param  array<string, mixed>  $query
+     * @return array<int, mixed> raw order payloads, straight from JSON
+     */
+    private function fetchPage(Shop $shop, array $query): array
+    {
+        $response = $this->client
+            ->withTimeout((int) config('services.woocommerce.sync_timeout'))
+            ->get($shop, 'orders', $query);
+
+        if (! $response->successful()) {
+            $detail = $response->json('message');
+
+            throw new RuntimeException(Str::limit(
+                'The shop returned HTTP '.$response->status().
+                (is_string($detail) && $detail !== '' ? ': '.Str::squish($detail) : '.'),
+                250,
+            ));
+        }
+
+        $payloads = $response->json();
+
+        return is_array($payloads) ? $payloads : [];
+    }
+
+    /**
+     * Get the newest value of a timestamp field across a page of orders.
+     *
+     * @param  array<int, mixed>  $payloads
+     */
+    private function furthestTimestamp(array $payloads, string $field): ?CarbonImmutable
+    {
+        $furthest = null;
+
+        foreach ($payloads as $payload) {
+            $value = is_array($payload) ? ($payload[$field] ?? null) : null;
+
+            if (! is_string($value) || trim($value) === '') {
+                continue;
+            }
+
+            $candidate = CarbonImmutable::parse($value, 'UTC');
+
+            if ($furthest === null || $candidate->greaterThan($furthest)) {
+                $furthest = $candidate;
+            }
+        }
+
+        return $furthest;
+    }
+
+    /**
+     * Record that the sync could not finish.
+     */
+    private function recordFailure(ShopSyncState $state, string $message): ShopSyncResult
+    {
+        $message = Str::limit(Str::squish($message), 250);
+
+        $state->update([
+            'status' => ShopSyncStatus::Failed,
+            'last_error' => $message,
+            'last_finished_at' => now(),
+        ]);
+
+        return new ShopSyncResult(status: ShopSyncStatus::Failed, message: $message);
+    }
+
+    /**
+     * Get the query parameters every order request shares.
+     *
+     * @return array<string, mixed>
+     */
+    private function baseQuery(): array
+    {
+        return [
+            'per_page' => $this->pageSize(),
+            'status' => 'any',
+            // Without this, WooCommerce reads the date filters in the shop's
+            // own timezone while returning timestamps in GMT.
+            'dates_are_gmt' => 'true',
+        ];
+    }
+
+    private function pageSize(): int
+    {
+        return (int) config('services.woocommerce.sync_page_size');
+    }
+
+    private function maxPages(): int
+    {
+        return (int) config('services.woocommerce.sync_max_pages_per_run');
+    }
+
+    private function overlapMinutes(): int
+    {
+        return (int) config('services.woocommerce.sync_overlap_minutes');
+    }
+}

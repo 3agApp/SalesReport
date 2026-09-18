@@ -45,12 +45,6 @@ class TestShopConnection
 
         try {
             $response = $this->client->get($shop, 'orders', $query);
-
-            // A 401 can mean the credentials are wrong, or that the host
-            // stripped the Authorization header before WordPress saw it.
-            if ($response->status() === 401) {
-                $response = $this->client->getWithQueryAuth($shop, 'orders', $query);
-            }
         } catch (ConnectionException $exception) {
             return ShopConnectionResult::for(
                 ShopConnectionStatus::Unreachable,

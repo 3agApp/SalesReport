@@ -39,6 +39,14 @@ return [
         'connect_timeout' => (int) env('WOOCOMMERCE_CONNECT_TIMEOUT', 5),
         'timeout' => (int) env('WOOCOMMERCE_TIMEOUT', 10),
         'recheck_after_minutes' => (int) env('WOOCOMMERCE_RECHECK_AFTER_MINUTES', 60),
+
+        // Pulling a page of orders is far heavier than a connection check, so
+        // the sync gets its own, longer timeout.
+        'sync_timeout' => (int) env('WOOCOMMERCE_SYNC_TIMEOUT', 60),
+        'sync_page_size' => (int) env('WOOCOMMERCE_SYNC_PAGE_SIZE', 100),
+        'sync_max_pages_per_run' => (int) env('WOOCOMMERCE_SYNC_MAX_PAGES_PER_RUN', 50),
+        'sync_overlap_minutes' => (int) env('WOOCOMMERCE_SYNC_OVERLAP_MINUTES', 10),
+        'sync_after_minutes' => (int) env('WOOCOMMERCE_SYNC_AFTER_MINUTES', 15),
     ],
 
 ];
