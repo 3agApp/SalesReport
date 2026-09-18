@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'woocommerce' => [
+        'connect_timeout' => (int) env('WOOCOMMERCE_CONNECT_TIMEOUT', 5),
+        'timeout' => (int) env('WOOCOMMERCE_TIMEOUT', 10),
+        'recheck_after_minutes' => (int) env('WOOCOMMERCE_RECHECK_AFTER_MINUTES', 60),
+    ],
+
 ];

@@ -6,6 +6,7 @@ import {
     ExternalLink,
     MoreHorizontal,
     Pencil,
+    PlugZap,
     Plus,
     Search,
     Store,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import DeleteShopModal from '@/components/delete-shop-modal';
+import ShopConnectionBadge from '@/components/shop-connection-badge';
 import ShopFormModal from '@/components/shop-form-modal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -35,6 +37,7 @@ import {
 } from '@/components/ui/table';
 import { dashboard } from '@/routes';
 import { index as shopsIndex } from '@/routes/shops';
+import { test as testShopConnection } from '@/routes/shops/connection';
 import type {
     OrganizationPermissions,
     Paginated,
@@ -62,6 +65,7 @@ export default function ShopsIndex({
     const [editingShop, setEditingShop] = useState<Shop | null>(null);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [shopToDelete, setShopToDelete] = useState<Shop | null>(null);
+    const [testingShopId, setTestingShopId] = useState<number | null>(null);
     const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
 
     useEffect(() => {
@@ -109,6 +113,19 @@ export default function ShopsIndex({
     const openEditForm = (shop: Shop) => {
         setEditingShop(shop);
         setFormOpen(true);
+    };
+
+    const testConnection = (shop: Shop) => {
+        router.post(
+            testShopConnection([currentOrganization.slug, shop.id]).url,
+            {},
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onStart: () => setTestingShopId(shop.id),
+                onFinish: () => setTestingShopId(null),
+            },
+        );
     };
 
     const confirmDelete = (shop: Shop) => {
@@ -176,11 +193,14 @@ export default function ShopsIndex({
                             <TableHeader>
                                 <TableRow className="hover:bg-transparent">
                                     <TableHead className="pl-6">Shop</TableHead>
-                                    <TableHead>Platform</TableHead>
-                                    <TableHead className="hidden md:table-cell">
+                                    <TableHead className="hidden sm:table-cell">
+                                        Platform
+                                    </TableHead>
+                                    <TableHead>Connection</TableHead>
+                                    <TableHead className="hidden lg:table-cell">
                                         API key
                                     </TableHead>
-                                    <TableHead className="hidden lg:table-cell">
+                                    <TableHead className="hidden xl:table-cell">
                                         Updated
                                     </TableHead>
                                     {canManageShops ? (
@@ -204,7 +224,7 @@ export default function ShopsIndex({
                                                     <Store className="size-4" />
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <div className="max-w-64 truncate font-medium">
+                                                    <div className="max-w-36 truncate font-medium sm:max-w-64">
                                                         {shop.name}
                                                     </div>
                                                     <a
@@ -219,15 +239,23 @@ export default function ShopsIndex({
                                                 </div>
                                             </div>
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell className="hidden sm:table-cell">
                                             <Badge variant="secondary">
                                                 {shop.platformLabel}
                                             </Badge>
                                         </TableCell>
-                                        <TableCell className="text-muted-foreground hidden font-mono text-xs md:table-cell">
+                                        <TableCell>
+                                            <ShopConnectionBadge
+                                                connection={shop.connection}
+                                                testing={
+                                                    testingShopId === shop.id
+                                                }
+                                            />
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground hidden font-mono text-xs lg:table-cell">
                                             {shop.consumerKeyHint}
                                         </TableCell>
-                                        <TableCell className="text-muted-foreground hidden lg:table-cell">
+                                        <TableCell className="text-muted-foreground hidden xl:table-cell">
                                             {shop.updatedAtDiff}
                                         </TableCell>
                                         {canManageShops ? (
@@ -254,16 +282,35 @@ export default function ShopsIndex({
                                                         className="w-40"
                                                     >
                                                         {permissions.canUpdateShop ? (
-                                                            <DropdownMenuItem
-                                                                data-test="shop-edit"
-                                                                onSelect={() =>
-                                                                    openEditForm(
-                                                                        shop,
-                                                                    )
-                                                                }
-                                                            >
-                                                                <Pencil /> Edit
-                                                            </DropdownMenuItem>
+                                                            <>
+                                                                <DropdownMenuItem
+                                                                    data-test="shop-test-connection"
+                                                                    disabled={
+                                                                        testingShopId ===
+                                                                        shop.id
+                                                                    }
+                                                                    onSelect={() =>
+                                                                        testConnection(
+                                                                            shop,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <PlugZap />{' '}
+                                                                    Test
+                                                                    connection
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem
+                                                                    data-test="shop-edit"
+                                                                    onSelect={() =>
+                                                                        openEditForm(
+                                                                            shop,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <Pencil />{' '}
+                                                                    Edit
+                                                                </DropdownMenuItem>
+                                                            </>
                                                         ) : null}
                                                         {permissions.canUpdateShop &&
                                                         permissions.canDeleteShop ? (

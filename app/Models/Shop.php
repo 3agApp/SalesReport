@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Data\ShopConnectionResult;
+use App\Enums\ShopConnectionStatus;
 use App\Enums\ShopPlatform;
 use Database\Factories\ShopFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,6 +23,10 @@ use Illuminate\Support\Str;
  * @property ShopPlatform $platform
  * @property string $consumer_key
  * @property string $consumer_secret
+ * @property ShopConnectionStatus $connection_status
+ * @property string|null $connection_message
+ * @property Carbon|null $connection_checked_at
+ * @property int|null $connection_response_time_ms
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Organization $organization
@@ -71,6 +78,51 @@ class Shop extends Model
     }
 
     /**
+     * Scope the query to shops whose connection needs someone's attention.
+     *
+     * A shop that has never been tested is not yet a problem.
+     *
+     * @param  Builder<Shop>  $query
+     */
+    public function scopeNeedingAttention(Builder $query): void
+    {
+        $query->whereIn('connection_status', ShopConnectionStatus::needingAttention());
+    }
+
+    /**
+     * Record the outcome of a connection check.
+     *
+     * Timestamps are left alone on purpose: an automatic hourly check is not
+     * someone updating the shop, and letting it move `updated_at` would
+     * reshuffle "recently updated" into "recently checked".
+     */
+    public function recordConnectionResult(ShopConnectionResult $result): void
+    {
+        static::withoutTimestamps(fn () => $this->forceFill([
+            'connection_status' => $result->status,
+            'connection_message' => $result->message,
+            'connection_checked_at' => now(),
+            'connection_response_time_ms' => $result->responseTimeMs,
+        ])->save());
+    }
+
+    /**
+     * Forget the recorded connection status.
+     *
+     * Called when the credentials change, so a stale "Connected" badge never
+     * outlives the key that earned it.
+     */
+    public function forgetConnectionStatus(): void
+    {
+        $this->forceFill([
+            'connection_status' => ShopConnectionStatus::Unknown,
+            'connection_message' => null,
+            'connection_checked_at' => null,
+            'connection_response_time_ms' => null,
+        ]);
+    }
+
+    /**
      * Get a masked hint of the consumer key, so the UI can confirm which
      * credentials are stored without ever exposing them in full.
      */
@@ -90,6 +142,8 @@ class Shop extends Model
             'platform' => ShopPlatform::class,
             'consumer_key' => 'encrypted',
             'consumer_secret' => 'encrypted',
+            'connection_status' => ShopConnectionStatus::class,
+            'connection_checked_at' => 'datetime',
         ];
     }
 }

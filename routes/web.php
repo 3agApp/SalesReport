@@ -3,6 +3,7 @@
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\Organizations\OrganizationInvitationController;
+use App\Http\Controllers\Shops\ShopConnectionController;
 use App\Http\Controllers\Shops\ShopController;
 use App\Http\Middleware\EnsureOrganizationMembership;
 use Illuminate\Support\Facades\Route;
@@ -23,6 +24,10 @@ Route::prefix('{current_organization}')
         Route::post('shops', [ShopController::class, 'store'])->name('shops.store');
         Route::patch('shops/{shop}', [ShopController::class, 'update'])->name('shops.update');
         Route::delete('shops/{shop}', [ShopController::class, 'destroy'])->name('shops.destroy');
+
+        Route::post('shops/{shop}/connection', ShopConnectionController::class)
+            ->middleware('throttle:10,1')
+            ->name('shops.connection.test');
     });
 
 Route::get('invitations', [OrganizationInvitationController::class, 'index'])

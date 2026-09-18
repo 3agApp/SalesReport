@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Shops;
 use App\Enums\ShopPlatform;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Shops\SaveShopRequest;
+use App\Jobs\Shops\CheckShopConnection;
 use App\Models\Organization;
 use App\Models\Shop;
 use Illuminate\Http\RedirectResponse;
@@ -54,7 +55,9 @@ class ShopController extends Controller
      */
     public function store(SaveShopRequest $request, Organization $currentOrganization): RedirectResponse
     {
-        $currentOrganization->shops()->create($request->shopAttributes());
+        $shop = $currentOrganization->shops()->create($request->shopAttributes());
+
+        CheckShopConnection::dispatch($shop);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Shop added.')]);
 
@@ -68,7 +71,18 @@ class ShopController extends Controller
      */
     public function update(SaveShopRequest $request, Organization $currentOrganization, Shop $shop): RedirectResponse
     {
-        $shop->update($request->shopAttributes());
+        $attributes = $request->shopAttributes();
+        $credentialsChanged = isset($attributes['consumer_key']) || isset($attributes['consumer_secret']);
+
+        if ($credentialsChanged) {
+            $shop->forgetConnectionStatus();
+        }
+
+        $shop->update($attributes);
+
+        if ($credentialsChanged) {
+            CheckShopConnection::dispatch($shop);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Shop updated.')]);
 
@@ -97,7 +111,7 @@ class ShopController extends Controller
      * Credentials are write-only, so only a masked hint of the consumer key
      * ever reaches the browser.
      *
-     * @return array{id: int, name: string, url: string, host: string, platform: string, platformLabel: string, consumerKeyHint: string, updatedAtDiff: string|null}
+     * @return array{id: int, name: string, url: string, host: string, platform: string, platformLabel: string, consumerKeyHint: string, updatedAtDiff: string|null, connection: array{status: string, statusLabel: string, tone: string, message: string|null, checkedAtDiff: string|null}}
      */
     private function toShopPayload(Shop $shop): array
     {
@@ -110,6 +124,13 @@ class ShopController extends Controller
             'platformLabel' => $shop->platform->label(),
             'consumerKeyHint' => $shop->consumerKeyHint(),
             'updatedAtDiff' => $shop->updated_at?->diffForHumans(),
+            'connection' => [
+                'status' => $shop->connection_status->value,
+                'statusLabel' => $shop->connection_status->label(),
+                'tone' => $shop->connection_status->tone(),
+                'message' => $shop->connection_message,
+                'checkedAtDiff' => $shop->connection_checked_at?->diffForHumans(),
+            ],
         ];
     }
 }

@@ -6,7 +6,14 @@ use App\Models\Organization;
 use App\Models\Shop;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
+
+beforeEach(function () {
+    // Saving a shop queues a connection check. These tests are about the shop
+    // record itself; the check has its own test file.
+    Queue::fake();
+});
 
 /**
  * @param  array<string, mixed>  $overrides

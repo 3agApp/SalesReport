@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 import { edit as editOrganization } from '@/routes/organizations';
 import { index as shopsIndex } from '@/routes/shops';
-import type { OrganizationPermissions } from '@/types';
+import ShopConnectionBadge from '@/components/shop-connection-badge';
+import { cn } from '@/lib/utils';
+import type { OrganizationPermissions, ShopConnection } from '@/types';
 
 type RecentShop = {
     id: number;
@@ -13,12 +15,14 @@ type RecentShop = {
     host: string;
     platformLabel: string;
     updatedAtDiff: string | null;
+    connection: ShopConnection;
 };
 
 type Props = {
     stats: {
         shops: number;
         members: number;
+        shopsNeedingAttention: number;
     };
     recentShops: RecentShop[];
     permissions: OrganizationPermissions;
@@ -29,6 +33,7 @@ type Stat = {
     value: number;
     href: string;
     testId: string;
+    alert?: boolean;
 };
 
 /**
@@ -40,13 +45,21 @@ function StatTile({ stat }: { stat: Stat }) {
         <Link
             href={stat.href}
             data-test={stat.testId}
-            className="workspace-panel hover:border-primary/40 flex flex-col gap-2 px-6 py-5 transition-colors"
+            className={cn(
+                'workspace-panel hover:border-primary/40 flex flex-col gap-2 px-6 py-5 transition-colors',
+                stat.alert && 'border-red-600/30 dark:border-red-400/30',
+            )}
         >
             <span className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
                 {stat.label}
             </span>
-            <span className="text-3xl font-semibold tabular-nums">
-                {stat.value}
+            <span
+                className={cn(
+                    'text-3xl font-semibold tabular-nums',
+                    stat.alert && 'text-red-700 dark:text-red-400',
+                )}
+            >
+                {stat.value.toLocaleString()}
             </span>
         </Link>
     );
@@ -74,6 +87,13 @@ export default function Dashboard({ stats, recentShops, permissions }: Props) {
             href: editOrganization(organizationSlug).url,
             testId: 'dashboard-members',
         },
+        {
+            label: 'Needs attention',
+            value: stats.shopsNeedingAttention,
+            href: shopsIndex(organizationSlug).url,
+            testId: 'dashboard-shop-issues',
+            alert: stats.shopsNeedingAttention > 0,
+        },
     ];
 
     return (
@@ -90,7 +110,7 @@ export default function Dashboard({ stats, recentShops, permissions }: Props) {
                     </p>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {tiles.map((stat) => (
                         <StatTile key={stat.label} stat={stat} />
                     ))}
@@ -133,6 +153,9 @@ export default function Dashboard({ stats, recentShops, permissions }: Props) {
                                             <ExternalLink className="size-3" />
                                         </a>
                                     </div>
+                                    <ShopConnectionBadge
+                                        connection={shop.connection}
+                                    />
                                     <div className="text-muted-foreground hidden text-xs sm:block">
                                         {shop.updatedAtDiff}
                                     </div>
