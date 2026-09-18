@@ -1,10 +1,9 @@
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-react';
+import { LayoutGrid, Settings2, Store } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
-import { TeamSwitcher } from '@/components/team-switcher';
+import { OrganizationSwitcher } from '@/components/organization-switcher';
 import {
     Sidebar,
     SidebarContent,
@@ -15,12 +14,14 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
+import { edit as editOrganization } from '@/routes/organizations';
+import { index as shopsIndex } from '@/routes/shops';
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
-    const page = usePage();
-    const dashboardUrl = page.props.currentTeam
-        ? dashboard(page.props.currentTeam.slug)
+    const { currentOrganization } = usePage().props;
+    const dashboardUrl = currentOrganization
+        ? dashboard(currentOrganization.slug)
         : '/';
 
     const mainNavItems: NavItem[] = [
@@ -31,18 +32,20 @@ export function AppSidebar() {
         },
     ];
 
-    const footerNavItems: NavItem[] = [
-        {
-            title: 'Repository',
-            href: 'https://github.com/laravel/react-starter-kit',
-            icon: FolderGit2,
-        },
-        {
-            title: 'Documentation',
-            href: 'https://laravel.com/docs/starter-kits#react',
-            icon: BookOpen,
-        },
-    ];
+    if (currentOrganization) {
+        mainNavItems.push(
+            {
+                title: 'Shops',
+                href: shopsIndex(currentOrganization.slug),
+                icon: Store,
+            },
+            {
+                title: 'Organization settings',
+                href: editOrganization(currentOrganization.slug),
+                icon: Settings2,
+            },
+        );
+    }
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -58,7 +61,7 @@ export function AppSidebar() {
                 </SidebarMenu>
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <TeamSwitcher />
+                        <OrganizationSwitcher />
                     </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarHeader>
@@ -68,7 +71,6 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

@@ -1,11 +1,12 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/react-starter-kit",
+    "name": "salesreport/sales-report",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
+    "description": "SalesReport brings the sales figures from every one of your WooCommerce shops into one place.",
     "keywords": [
         "laravel",
-        "framework"
+        "woocommerce",
+        "sales"
     ],
     "license": "MIT",
     "require": {

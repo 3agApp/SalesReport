@@ -11,6 +11,7 @@
 /resources/js/routes
 /resources/js/wayfinder
 /vendor
+/database/seeders/data/shops.json
 .DS_Store
 .env
 .env.backup

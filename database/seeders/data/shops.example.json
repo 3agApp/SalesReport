@@ -1,0 +1,11 @@
+{
+    "organization": "Acme Group",
+    "shops": [
+        {
+            "name": "Example Shop",
+            "url": "https://example.com",
+            "consumer_key": "ck_0000000000000000000000000000000000000000",
+            "consumer_secret": "cs_0000000000000000000000000000000000000000"
+        }
+    ]
+}
