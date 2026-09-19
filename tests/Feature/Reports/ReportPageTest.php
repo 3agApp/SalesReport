@@ -7,6 +7,7 @@ use App\Models\Shop;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('members can see the reports page', function () {
@@ -299,4 +300,25 @@ test('the shops page says when its shops disagree on currency', function () {
         ->get(route('shops.index', $organization))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page->where('currencies', ['CHF', 'EUR']));
+});
+
+test('the report page does not scan the orders table once per panel', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $shop = Shop::factory()->for($organization)->create();
+    Order::factory()->count(5)->for($shop)->create(['placed_at' => now()->subDay()]);
+
+    DB::connection()->enableQueryLog();
+    DB::connection()->flushQueryLog();
+
+    $this->actingAs($user)->get(route('reports.index', [$organization, 'period' => 'this_month']))->assertOk();
+
+    // The status counts are a grouped scan of every order the organization
+    // holds. One page asks three times over; it should only pay once.
+    $scans = collect(DB::connection()->getQueryLog())
+        ->filter(fn (array $query) => str_contains($query['query'], 'count(*) as order_count')
+            && str_contains($query['query'], 'group by'))
+        ->count();
+
+    expect($scans)->toBe(1);
 });

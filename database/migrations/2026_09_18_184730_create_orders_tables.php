@@ -17,6 +17,10 @@ return new class extends Migration
             $table->string('status')->default('pending')->index();
             // Where the historical import has got to, and when it finished.
             $table->timestamp('backfill_cursor')->nullable();
+            // How many orders on the cursor's own second have already been
+            // read. A bulk-migrated store can carry thousands of orders on
+            // one timestamp, which the date cursor alone cannot step over.
+            $table->unsignedInteger('backfill_offset')->default(0);
             $table->timestamp('backfill_completed_at')->nullable();
             // The high-water mark for the incremental pass.
             $table->timestamp('last_synced_at')->nullable()->index();

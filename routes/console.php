@@ -8,7 +8,10 @@ Schedule::call(function () {
         ->whereNotNull('expires_at')
         ->where('expires_at', '<', now())
         ->delete();
-})->daily()->description('Delete expired organization invitations');
+})->daily()
+    // A closure needs a name before it can be pinned to one server.
+    ->description('Delete expired organization invitations')
+    ->onOneServer();
 
 Schedule::command('shops:check-connections')
     ->hourly()

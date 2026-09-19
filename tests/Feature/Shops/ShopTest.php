@@ -355,3 +355,69 @@ test('removing an organization removes its shops', function () {
 
     $this->assertDatabaseMissing('shops', ['id' => $shop->id]);
 });
+
+test('a shop cannot be aimed at this server or its network', function (string $url) {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+
+    $this
+        ->actingAs($user)
+        ->post(route('shops.store', $organization), validShopData(['url' => $url]))
+        ->assertSessionHasErrors('url');
+
+    expect($organization->shops()->count())->toBe(0);
+})->with([
+    // Every one of these is fetched by the server itself, with credentials
+    // attached, and the outcome reported back in the interface.
+    'cloud metadata' => ['http://169.254.169.254'],
+    'loopback address' => ['http://127.0.0.1:6379'],
+    'private address' => ['https://10.0.0.5'],
+    'ipv6 loopback' => ['http://[::1]'],
+    'single label host' => ['http://localhost'],
+    'intranet machine' => ['https://wiki'],
+]);
+
+test('a shop whose name resolves onto the private network is refused', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+
+    // The name itself looks ordinary; it is where it points that matters.
+    $this->resolveHostsTo(['10.1.2.3']);
+
+    $this
+        ->actingAs($user)
+        ->post(route('shops.store', $organization), validShopData(['url' => 'https://toysonline.test']))
+        ->assertSessionHasErrors('url');
+
+    expect($organization->shops()->count())->toBe(0);
+});
+
+test('an ordinary shop address is still accepted', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+
+    $this->resolveHostsTo(['203.0.113.10']);
+
+    $this
+        ->actingAs($user)
+        ->post(route('shops.store', $organization), validShopData(['url' => 'https://toysonline.test']))
+        ->assertSessionHasNoErrors();
+
+    expect($organization->shops()->count())->toBe(1);
+});
+
+test('a search treats a wildcard as the character someone typed', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+
+    Shop::factory()->for($organization)->create(['name' => '50% Off Toys', 'url' => 'https://a.test']);
+    Shop::factory()->for($organization)->create(['name' => 'Tigerbox', 'url' => 'https://b.test']);
+
+    $this
+        ->actingAs($user)
+        ->get(route('shops.index', [$organization, 'search' => '50%']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('shops.data', 1)
+            ->where('shops.data.0.name', '50% Off Toys'));
+});

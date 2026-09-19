@@ -165,7 +165,7 @@ class Shop extends Model
             // Re-read along with everything else: new credentials can point
             // at a different store than the old ones did.
             'currency' => null,
-        ]);
+        ])->save();
     }
 
     /**

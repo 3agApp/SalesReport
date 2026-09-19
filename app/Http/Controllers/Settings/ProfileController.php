@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Actions\Organizations\HandOverOwnedOrganizations;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileDeleteRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
@@ -46,9 +47,13 @@ class ProfileController extends Controller
     /**
      * Delete the user's profile.
      */
-    public function destroy(ProfileDeleteRequest $request): RedirectResponse
+    public function destroy(ProfileDeleteRequest $request, HandOverOwnedOrganizations $handOver): RedirectResponse
     {
         $user = $request->user();
+
+        // Memberships cascade away with the user row, so this has to happen
+        // first or every organization they owned is left without an owner.
+        $handOver->handle($user);
 
         Auth::logout();
 

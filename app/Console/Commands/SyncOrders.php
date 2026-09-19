@@ -40,6 +40,8 @@ class SyncOrders extends Command
         }
 
         Shop::query()
+            // A shop whose organization has been deleted is nobody's to sync.
+            ->whereHas('organization')
             ->when($this->option('shop'), fn (Builder $query, string $shop) => $query->whereKey($shop))
             // There is no point asking a shop for orders when the last check
             // said its credentials do not work.
@@ -66,6 +68,7 @@ class SyncOrders extends Command
                         // as the tax inside a refund, get filled in.
                         $shop->syncStateOrCreate()->update([
                             'backfill_cursor' => null,
+                            'backfill_offset' => 0,
                             'backfill_completed_at' => null,
                             'last_synced_at' => null,
                         ]);

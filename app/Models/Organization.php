@@ -34,6 +34,17 @@ class Organization extends Model
     use GeneratesUniqueOrganizationSlugs, HasFactory, SoftDeletes;
 
     /**
+     * The statuses observed in this organization's orders, once counted.
+     *
+     * The count is a grouped scan of every order the organization holds, and
+     * one report page asks for it three times over: for the status filter's
+     * options, for what counts as revenue, and again for the page payload.
+     *
+     * @var array<string, int>|null
+     */
+    private ?array $observedOrderStatuses = null;
+
+    /**
      * Bootstrap the model and its traits.
      */
     protected static function boot(): void
@@ -120,6 +131,10 @@ class Organization extends Model
      */
     public function observedOrderStatuses(): array
     {
+        if ($this->observedOrderStatuses !== null) {
+            return $this->observedOrderStatuses;
+        }
+
         /** @var array<string, int> $counts */
         $counts = Order::query()
             ->whereIn('shop_id', $this->shops()->select('id'))
@@ -132,7 +147,7 @@ class Organization extends Model
             ->pluck('order_count', 'status')
             ->all();
 
-        return $counts;
+        return $this->observedOrderStatuses = $counts;
     }
 
     /**

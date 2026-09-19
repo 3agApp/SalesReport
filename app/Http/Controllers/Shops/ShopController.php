@@ -9,6 +9,7 @@ use App\Http\Requests\Shops\SaveShopRequest;
 use App\Jobs\Shops\CheckShopConnection;
 use App\Models\Organization;
 use App\Models\Shop;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -34,9 +35,9 @@ class ShopController extends Controller
         $shops = $currentOrganization->shops()
             ->with('syncState')
             ->withCount('orders')
-            ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('url', 'like', "%{$search}%")))
+            ->when($search !== '', fn (Builder $query) => $query->where(fn (Builder $query) => $query
+                ->whereRaw("name LIKE ? ESCAPE '!'", ['%'.$this->escapeLike($search).'%'])
+                ->orWhereRaw("url LIKE ? ESCAPE '!'", ['%'.$this->escapeLike($search).'%'])))
             ->orderByRaw('LOWER(name)')
             ->paginate(self::PER_PAGE)
             ->withQueryString();
@@ -109,6 +110,23 @@ class ShopController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Shop removed.')]);
 
         return back();
+    }
+
+    /**
+     * Escape the wildcards in a search term.
+     *
+     * Someone looking for "50%" means the characters, not "anything at all",
+     * and an underscore in a shop name should match an underscore.
+     *
+     * The escape character is named explicitly, because SQLite has none by
+     * default while MySQL and Postgres assume a backslash. It is an
+     * exclamation mark rather than a backslash because a backslash cannot be
+     * written as a one-character SQL literal on MySQL, where it would escape
+     * the closing quote.
+     */
+    private function escapeLike(string $term): string
+    {
+        return str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $term);
     }
 
     /**

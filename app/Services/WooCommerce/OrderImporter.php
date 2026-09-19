@@ -66,6 +66,7 @@ class OrderImporter
             OrderItem::query()->whereIn('order_id', $orderIds->values())->delete();
 
             $itemRows = [];
+            $seen = [];
 
             foreach ($payloads as $payload) {
                 $orderId = $orderIds[(int) $payload['id']] ?? null;
@@ -79,9 +80,23 @@ class OrderImporter
                         continue;
                     }
 
+                    $row = $this->toItemRow($lineItem);
+
+                    // A line WooCommerce sent without an id of its own falls
+                    // back to zero, and a second one would collide with it on
+                    // the order's unique index and roll back the whole page.
+                    // One degenerate line is worth less than the import.
+                    $key = $orderId.':'.$row['woo_id'];
+
+                    if (isset($seen[$key])) {
+                        continue;
+                    }
+
+                    $seen[$key] = true;
+
                     $itemRows[] = [
                         'order_id' => $orderId,
-                        ...$this->toItemRow($lineItem),
+                        ...$row,
                         'created_at' => $now,
                         'updated_at' => $now,
                     ];

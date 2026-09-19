@@ -8,7 +8,9 @@ use App\Models\OrderItem;
 use App\Models\Shop;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Illuminate\Support\LazyCollection;
 
 /**
  * Answers the questions a bookkeeper brings to the order data.
@@ -22,6 +24,11 @@ class SalesReport
      * The number of products listed in the top products table.
      */
     private const int TOP_PRODUCTS = 10;
+
+    /**
+     * The number of rows an export reads from the database at a time.
+     */
+    private const int EXPORT_PAGE = 500;
 
     /**
      * @var array<string, mixed>|null
@@ -282,25 +289,84 @@ class SalesReport
     }
 
     /**
-     * Get the filtered orders, for streaming into an export.
+     * Stream the filtered orders, oldest first, for an export.
      *
-     * @return Builder<Order>
+     * @return LazyCollection<int, Order>
      */
-    public function ordersForExport(): Builder
+    public function ordersForExport(): LazyCollection
     {
-        return $this->orders()->with('shop')->orderBy('placed_at');
+        return $this->lazyInPlacedOrder($this->orders()->with('shop'), 'orders.placed_at', 'orders.id');
     }
 
     /**
-     * Get the filtered line items, for streaming into an export.
+     * Stream the filtered line items, oldest order first, for an export.
      *
-     * @return Builder<OrderItem>
+     * @return LazyCollection<int, OrderItem>
      */
-    public function itemsForExport(): Builder
+    public function itemsForExport(): LazyCollection
     {
-        return $this->items()
-            ->select(['order_items.*', 'orders.placed_at', 'orders.number as order_number', 'orders.shop_id', 'orders.status as order_status', 'orders.currency'])
-            ->orderBy('orders.placed_at');
+        $query = $this->items()->select([
+            'order_items.*',
+            'orders.placed_at',
+            'orders.number as order_number',
+            'orders.shop_id',
+            'orders.status as order_status',
+            'orders.currency',
+        ]);
+
+        return $this->lazyInPlacedOrder($query, 'orders.placed_at', 'order_items.id');
+    }
+
+    /**
+     * Walk an export query in date order, a page at a time.
+     *
+     * Keyset pagination has to page on the same columns the rows are sorted
+     * by. Eloquent's lazyById pages on the primary key alone, which quietly
+     * loses rows as soon as the query is sorted by anything else: the last
+     * row of a page is no longer the highest id in it, so every lower id
+     * still to come is skipped by the next page's `id >` bound. Two shops
+     * added at different times are enough to trigger it, because their ids
+     * and their order dates then run in different directions. Paging on
+     * (placed_at, id) keeps the date order and every row.
+     *
+     * @template TModel of Model
+     *
+     * @param  Builder<TModel>  $query
+     * @return LazyCollection<int, TModel>
+     */
+    private function lazyInPlacedOrder(Builder $query, string $placedAtColumn, string $idColumn): LazyCollection
+    {
+        return LazyCollection::make(function () use ($query, $placedAtColumn, $idColumn) {
+            $placedAt = null;
+            $id = 0;
+
+            while (true) {
+                $page = (clone $query)
+                    ->when($placedAt !== null, fn (Builder $query) => $query->where(
+                        fn (Builder $query) => $query
+                            ->where($placedAtColumn, '>', $placedAt)
+                            ->orWhere(fn (Builder $query) => $query
+                                ->where($placedAtColumn, '=', $placedAt)
+                                ->where($idColumn, '>', $id)),
+                    ))
+                    ->orderBy($placedAtColumn)
+                    ->orderBy($idColumn)
+                    ->limit(self::EXPORT_PAGE)
+                    ->get();
+
+                foreach ($page as $row) {
+                    yield $row;
+                }
+
+                if ($page->count() < self::EXPORT_PAGE) {
+                    return;
+                }
+
+                $last = $page->last();
+                $placedAt = $last->getAttribute('placed_at');
+                $id = $last->getKey();
+            }
+        });
     }
 
     /**
