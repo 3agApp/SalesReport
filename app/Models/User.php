@@ -29,7 +29,10 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, Organization> $organizations
  */
 #[Fillable(['name', 'email', 'password', 'current_organization_id', 'sso_id'])]
-#[Hidden(['password', 'remember_token'])]
+// two_factor_* are the columns Fortify left behind. Nothing reads them any
+// more, but they outlive the feature in the database, and every page shares
+// this model as the 'auth.user' prop -- so they stay hidden until dropped.
+#[Hidden(['password', 'remember_token', 'sso_id', 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_confirmed_at'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
