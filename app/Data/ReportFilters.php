@@ -107,10 +107,11 @@ readonly class ReportFilters
     }
 
     /**
-     * Get the statuses a report counts unless told otherwise.
+     * Get the statuses a report counts when nobody has said otherwise.
      *
      * Only orders whose payment went through: an on-hold order is money the
-     * shop hopes for, not money it has taken.
+     * shop hopes for, not money it has taken. An organization overrides this
+     * per status; see Organization::revenueStatuses().
      *
      * @return array<string>
      */

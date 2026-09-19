@@ -4,7 +4,6 @@ namespace App\Http\Requests\Reports;
 
 use App\Data\ReportFilters;
 use App\Enums\ReportPeriod;
-use App\Models\Order;
 use App\Models\Organization;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -36,7 +35,7 @@ class ReportFilterRequest extends FormRequest
             'shops' => ['nullable', 'array'],
             'shops.*' => ['integer'],
             'statuses' => ['nullable', 'array'],
-            'statuses.*' => ['string', Rule::in(Order::OPEN_STATUSES + ['cancelled', 'failed', 'trash'])],
+            'statuses.*' => ['string'],
         ];
     }
 
@@ -59,10 +58,14 @@ class ReportFilterRequest extends FormRequest
         $requested = array_map('intval', (array) $this->query('shops', []));
         $shopIds = $requested === [] ? $ownShopIds : array_values(array_intersect($ownShopIds, $requested));
 
-        $statuses = array_values(array_filter(
+        // Intersected rather than rejected, the same way shops are: a saved
+        // link keeps working after a status stops being used, and a status
+        // typed into the query string quietly drops out instead of erroring.
+        $requestedStatuses = array_filter(
             (array) $this->query('statuses', []),
             fn (mixed $status) => is_string($status) && $status !== '',
-        ));
+        );
+        $statuses = array_values(array_intersect(array_keys($organization->orderStatuses()), $requestedStatuses));
 
         return new ReportFilters(
             period: $period,
@@ -70,7 +73,7 @@ class ReportFilterRequest extends FormRequest
             to: $to,
             timezone: $timezone,
             shopIds: $shopIds === [] ? $ownShopIds : $shopIds,
-            statuses: $statuses === [] ? ReportFilters::defaultStatuses() : $statuses,
+            statuses: $statuses === [] ? $organization->revenueStatuses() : $statuses,
         );
     }
 

@@ -29,6 +29,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $discount_total
  * @property string $discount_tax
  * @property string $refunded_total
+ * @property string $refunded_tax
  * @property int|null $customer_woo_id
  * @property string|null $customer_email
  * @property string|null $customer_name
@@ -46,7 +47,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable([
     'woo_id', 'number', 'status', 'currency',
     'total', 'total_tax', 'shipping_total', 'shipping_tax', 'cart_tax',
-    'discount_total', 'discount_tax', 'refunded_total',
+    'discount_total', 'discount_tax', 'refunded_total', 'refunded_tax',
     'customer_woo_id', 'customer_email', 'customer_name', 'billing_country',
     'payment_method_title', 'placed_at', 'paid_at', 'completed_at', 'woo_updated_at',
 ])]
@@ -67,13 +68,28 @@ class Order extends Model
     public const array SETTLED_STATUSES = ['processing', 'completed'];
 
     /**
-     * The statuses that mean an order is still alive, settled or not.
+     * The statuses WooCommerce itself ships with.
      *
-     * Cancelled and failed orders are the ones left out.
+     * A floor for the status filter, never the whole of it: a store can
+     * register statuses of its own, and the shops this was built against do
+     * exactly that. Anything else a shop uses is discovered from the orders.
      *
      * @var array<string>
      */
-    public const array OPEN_STATUSES = ['processing', 'completed', 'on-hold', 'refunded', 'pending'];
+    public const array CORE_STATUSES = [
+        'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed',
+    ];
+
+    /**
+     * Turn a status slug into something a bookkeeper can read.
+     *
+     * A store's own status has no label we know of, so the slug is all there
+     * is to go on. Tidying it beats showing the raw value.
+     */
+    public static function statusLabel(string $status): string
+    {
+        return ucfirst(str_replace('-', ' ', $status));
+    }
 
     /**
      * Get the shop the order belongs to.
@@ -131,6 +147,7 @@ class Order extends Model
             'discount_total' => 'decimal:4',
             'discount_tax' => 'decimal:4',
             'refunded_total' => 'decimal:4',
+            'refunded_tax' => 'decimal:4',
             'placed_at' => 'datetime',
             'paid_at' => 'datetime',
             'completed_at' => 'datetime',

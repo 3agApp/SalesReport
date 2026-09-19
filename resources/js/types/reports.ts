@@ -73,7 +73,6 @@ export type ReportProductRow = {
 
 export type ReportStatusRow = {
     status: string;
-    label: string;
     orderCount: number;
     netRevenue: number;
     counted: boolean;
@@ -85,3 +84,14 @@ export type ReportShopOption = { id: number; name: string };
 
 /** Which figure the time series is showing. */
 export type ReportMeasure = 'revenue' | 'orders' | 'averageOrderValue';
+
+export type OrderStatusSetting = {
+    status: string;
+    /** What the status would be called if the organization named nothing. */
+    suggestedLabel: string;
+    label: string | null;
+    countsAsRevenue: boolean;
+    /** False while nobody has said what this status means. */
+    decided: boolean;
+    orderCount: number;
+};

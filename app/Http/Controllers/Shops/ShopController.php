@@ -49,6 +49,9 @@ class ShopController extends Controller
             'shops' => $shops->through(fn (Shop $shop) => $this->toShopPayload($shop)),
             'filters' => ['search' => $search],
             'platforms' => ShopPlatform::options(),
+            // A second currency makes a cross-shop total impossible, so it is
+            // said here rather than discovered halfway down a report.
+            'currencies' => $currentOrganization->shopCurrencies(),
             'permissions' => $request->user()->toOrganizationPermissions($currentOrganization),
         ]);
     }
@@ -145,6 +148,7 @@ class ShopController extends Controller
             'host' => $shop->host(),
             'platform' => $shop->platform->value,
             'platformLabel' => $shop->platform->label(),
+            'currency' => $shop->currency,
             'consumerKeyHint' => $shop->consumerKeyHint(),
             'updatedAtDiff' => $shop->updated_at?->diffForHumans(),
             'connection' => [

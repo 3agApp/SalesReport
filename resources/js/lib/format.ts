@@ -5,11 +5,9 @@
  * fixed decimals and grouped thousands rather than compact notation.
  */
 
-/** The report says MIXED when a range spans more than one currency. */
-export const MIXED_CURRENCY = 'MIXED';
-
 export function formatMoney(value: number, currency: string): string {
-    if (!currency || currency === MIXED_CURRENCY) {
+    // A range with no orders in it has no currency to name.
+    if (!currency) {
         return new Intl.NumberFormat('en-CH', {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
@@ -30,7 +28,7 @@ export function formatMoney(value: number, currency: string): string {
 export function formatMoneyShort(value: number, currency: string): string {
     const rounded = Math.round(value);
 
-    if (!currency || currency === MIXED_CURRENCY) {
+    if (!currency) {
         return new Intl.NumberFormat('en-CH').format(rounded);
     }
 

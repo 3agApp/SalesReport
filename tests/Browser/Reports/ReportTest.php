@@ -64,3 +64,122 @@ test('the chart switches measure without reloading the page', function () {
         ->assertSee('Over time')
         ->assertNoJavaScriptErrors();
 });
+
+/**
+ * Build a report page showing one whole calendar month, so the date picker
+ * opens on a known pair of months whatever today's date happens to be.
+ *
+ * @return array{0: User, 1: CarbonImmutable}
+ */
+function reportPageForLastMonth(): array
+{
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $organization->update(['timezone' => 'Europe/Zurich']);
+
+    $shop = Shop::factory()->for($organization)->create();
+    $month = CarbonImmutable::now('Europe/Zurich')->subMonthNoOverflow()->startOfMonth();
+
+    foreach ([5, 12, 20] as $day) {
+        Order::factory()->for($shop)->create([
+            'status' => 'completed',
+            'total' => 100,
+            'refunded_total' => 0,
+            'currency' => 'CHF',
+            'placed_at' => $month->setDay($day)->setTime(12, 0)->utc(),
+        ]);
+    }
+
+    return [$user, $month];
+}
+
+test('picking a date range moves both ends of the report', function () {
+    [$user, $month] = reportPageForLastMonth();
+
+    // Mid-month days, so neither can also be drawn as a neighbouring month's
+    // outside day and match the selector twice.
+    $start = $month->setDay(5);
+    $end = $month->setDay(12);
+
+    $this->actingAs($user);
+
+    $page = visit(route('reports.index', [
+        $user->currentOrganization,
+        'period' => 'custom',
+        'from' => $month->toDateString(),
+        'to' => $month->endOfMonth()->toDateString(),
+    ]));
+
+    $page->click('@report-range')
+        ->click('[data-day="'.$start->toDateString().'"] button')
+        ->click('[data-day="'.$end->toDateString().'"] button')
+        // Both ends have to move. The picker used to only drag the end of the
+        // range along, leaving the start wherever the last report left it.
+        ->assertQueryStringHas('from', $start->toDateString())
+        ->assertQueryStringHas('to', $end->toDateString())
+        ->assertSeeIn(
+            '[data-test="report-range"]',
+            $start->format('j M Y').' – '.$end->format('j M Y'),
+        )
+        // Two of the three orders fall inside the new range.
+        ->assertSee('200.00')
+        ->assertNoJavaScriptErrors();
+});
+
+test('picking the same day twice reports on that one day', function () {
+    [$user, $month] = reportPageForLastMonth();
+
+    $day = $month->setDay(12);
+
+    $this->actingAs($user);
+
+    $page = visit(route('reports.index', [
+        $user->currentOrganization,
+        'period' => 'custom',
+        'from' => $month->toDateString(),
+        'to' => $month->endOfMonth()->toDateString(),
+    ]));
+
+    $page->click('@report-range')
+        ->click('[data-day="'.$day->toDateString().'"] button')
+        ->click('[data-day="'.$day->toDateString().'"] button')
+        ->assertQueryStringHas('from', $day->toDateString())
+        ->assertQueryStringHas('to', $day->toDateString())
+        ->assertNoJavaScriptErrors();
+});
+
+test('naming a status and counting it changes the report', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $shop = Shop::factory()->for($organization)->create(['name' => 'Toys Online']);
+
+    foreach (['completed', 'partial-complete'] as $status) {
+        Order::factory()->for($shop)->create([
+            'status' => $status,
+            'total' => 100,
+            'refunded_total' => 0,
+            'currency' => 'CHF',
+            'placed_at' => CarbonImmutable::now()->subDay(),
+        ]);
+    }
+
+    $this->actingAs($user);
+
+    $page = visit(route('reports.statuses.index', $organization));
+
+    // A slug the shop invented means nothing to a bookkeeper until they say
+    // what it is, and nothing is counted until they say it should be.
+    $page->assertSee('partial-complete')
+        ->assertSee('Not decided')
+        ->type('@status-label-partial-complete', 'Teilweise abgeschlossen')
+        ->click('@status-revenue-partial-complete')
+        ->click('@status-revenue-completed')
+        ->click('@save-order-statuses')
+        ->assertSee('Order statuses saved.')
+        ->assertNoJavaScriptErrors();
+
+    visit(route('reports.index', [$organization, 'period' => 'last_30_days']))
+        ->assertSee('Teilweise abgeschlossen')
+        ->assertSee('200.00')
+        ->assertNoJavaScriptErrors();
+});

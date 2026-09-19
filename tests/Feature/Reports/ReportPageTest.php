@@ -6,6 +6,7 @@ use App\Models\Organization;
 use App\Models\Shop;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('members can see the reports page', function () {
@@ -121,4 +122,181 @@ test('the organization timezone decides where a month ends', function () {
         ->actingAs($user)
         ->get(route('reports.index', [$organization, 'period' => 'custom', 'from' => '2026-04-01', 'to' => '2026-04-30']))
         ->assertInertia(fn (Assert $page) => $page->where('summary.netRevenue', 25));
+});
+
+test('a status the shop invented is offered as a filter', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $shop = Shop::factory()->for($organization)->create();
+
+    // WooCommerce stores register their own statuses: these two are live on
+    // the real shops this was built against.
+    Order::factory()->for($shop)->create(['status' => 'partial-complete', 'total' => 40, 'refunded_total' => 0, 'placed_at' => now()]);
+    Order::factory()->for($shop)->create(['status' => 'planzer-transmit', 'total' => 60, 'refunded_total' => 0, 'placed_at' => now()]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', $organization))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('statusOptions', fn (Collection $options) => $options
+                ->pluck('value')
+                ->contains('partial-complete')
+            )
+            ->where('statusOptions', fn (Collection $options) => $options
+                ->pluck('value')
+                ->contains('planzer-transmit')
+            )
+        );
+});
+
+test('the filter offers exactly the statuses the orders use', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $shop = Shop::factory()->for($organization)->create();
+
+    Order::factory()->for($shop)->create(['status' => 'completed', 'total' => 10, 'refunded_total' => 0, 'placed_at' => now()]);
+    Order::factory()->for($shop)->create(['status' => 'cancelled', 'total' => 10, 'refunded_total' => 0, 'placed_at' => now()]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', $organization))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            // Not a guessed list of WooCommerce's own: nothing is offered
+            // that no order has ever been in.
+            ->where('statusOptions', fn (Collection $options) => $options
+                ->pluck('value')
+                ->sort()
+                ->values()
+                ->all() === ['cancelled', 'completed']
+            )
+        );
+});
+
+test('an organization with no orders is offered no statuses', function () {
+    $user = User::factory()->create();
+    Shop::factory()->for($user->currentOrganization)->create();
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', $user->currentOrganization))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('statusOptions', []));
+});
+
+test('a report can be counted by a status the shop invented', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $shop = Shop::factory()->for($organization)->create();
+
+    Order::factory()->for($shop)->create(['status' => 'partial-complete', 'total' => 40, 'refunded_total' => 0, 'placed_at' => now()]);
+    Order::factory()->for($shop)->create(['status' => 'completed', 'total' => 60, 'refunded_total' => 0, 'placed_at' => now()]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', [$organization, 'statuses' => ['partial-complete']]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filters.statuses', ['partial-complete'])
+            ->where('summary.orderCount', 1)
+            ->where('summary.netRevenue', 40)
+        );
+});
+
+test('cancelled and failed orders can be counted when asked for', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $shop = Shop::factory()->for($organization)->create();
+
+    Order::factory()->for($shop)->create(['status' => 'cancelled', 'total' => 25, 'refunded_total' => 0, 'placed_at' => now()]);
+    Order::factory()->for($shop)->create(['status' => 'failed', 'total' => 15, 'refunded_total' => 0, 'placed_at' => now()]);
+    Order::factory()->for($shop)->create(['status' => 'completed', 'total' => 99, 'refunded_total' => 0, 'placed_at' => now()]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', [$organization, 'statuses' => ['cancelled', 'failed']]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filters.statuses', fn (Collection $statuses) => $statuses->sort()->values()->all() === ['cancelled', 'failed'])
+            ->where('summary.orderCount', 2)
+            ->where('summary.netRevenue', 40)
+        );
+});
+
+test('a status no shop of the organization uses falls back to the default', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $shop = Shop::factory()->for($organization)->create();
+
+    Order::factory()->for($shop)->create(['status' => 'completed', 'total' => 100, 'refunded_total' => 0, 'placed_at' => now()]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', [$organization, 'statuses' => ['not-a-real-status']]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            // Narrowed to what the orders actually use: the organization has
+            // nothing in "processing", so claiming to count it would be a lie.
+            ->where('filters.statuses', ['completed'])
+            ->where('summary.orderCount', 1)
+        );
+});
+
+test('a range spanning two currencies shows no figures at all', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+
+    $swiss = Shop::factory()->for($organization)->create(['currency' => 'CHF']);
+    $german = Shop::factory()->for($organization)->create(['currency' => 'EUR']);
+
+    Order::factory()->for($swiss)->create(['status' => 'completed', 'currency' => 'CHF', 'total' => 100, 'refunded_total' => 0, 'placed_at' => now()]);
+    Order::factory()->for($german)->create(['status' => 'completed', 'currency' => 'EUR', 'total' => 100, 'refunded_total' => 0, 'placed_at' => now()]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', $organization))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('currencyConflict', ['CHF', 'EUR'])
+            // No total is offered, because adding the two together would need
+            // a rate and would reconcile against neither set of books.
+            ->missing('summary')
+            ->has('filters')
+        );
+});
+
+test('narrowing to shops sharing a currency brings the figures back', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+
+    $swiss = Shop::factory()->for($organization)->create(['currency' => 'CHF']);
+    $german = Shop::factory()->for($organization)->create(['currency' => 'EUR']);
+
+    Order::factory()->for($swiss)->create(['status' => 'completed', 'currency' => 'CHF', 'total' => 100, 'refunded_total' => 0, 'placed_at' => now()]);
+    Order::factory()->for($german)->create(['status' => 'completed', 'currency' => 'EUR', 'total' => 999, 'refunded_total' => 0, 'placed_at' => now()]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', [$organization, 'shops' => [$swiss->id]]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->missing('currencyConflict')
+            ->where('summary.currency', 'CHF')
+            ->where('summary.netRevenue', 100)
+        );
+});
+
+test('the shops page says when its shops disagree on currency', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+
+    Shop::factory()->for($organization)->create(['currency' => 'CHF']);
+    Shop::factory()->for($organization)->create(['currency' => 'EUR']);
+
+    $this
+        ->actingAs($user)
+        ->get(route('shops.index', $organization))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('currencies', ['CHF', 'EUR']));
 });

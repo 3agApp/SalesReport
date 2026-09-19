@@ -69,7 +69,7 @@ class SalesReport
             ->selectRaw('count(*) as order_count')
             ->selectRaw('coalesce(sum(total), 0) as gross')
             ->selectRaw('coalesce(sum(refunded_total), 0) as refunded')
-            ->selectRaw('coalesce(sum(total_tax), 0) as tax')
+            ->selectRaw('coalesce(sum(total_tax) - sum(refunded_tax), 0) as tax')
             ->selectRaw('coalesce(sum(shipping_total), 0) as shipping')
             ->selectRaw('coalesce(sum(discount_total), 0) as discount')
             ->toBase()
@@ -234,7 +234,11 @@ class SalesReport
             ->selectRaw('max(order_items.name) as name')
             ->selectRaw('max(order_items.sku) as sku')
             ->selectRaw('sum(order_items.quantity) as quantity')
-            ->selectRaw('coalesce(sum(order_items.total), 0) as revenue')
+            // On the same footing as the headline figure, which counts
+            // the order total the customer paid, tax included. A line
+            // item's own total leaves tax out, so adding it back is what
+            // stops this panel quietly summing to less than the total.
+            ->selectRaw('coalesce(sum(order_items.total) + sum(order_items.total_tax), 0) as revenue')
             ->groupBy('product_key')
             ->orderByDesc('revenue')
             ->limit(self::TOP_PRODUCTS)
@@ -268,7 +272,6 @@ class SalesReport
             ->get()
             ->map(fn ($row) => [
                 'status' => (string) $row->status,
-                'label' => ucfirst(str_replace('-', ' ', (string) $row->status)),
                 'orderCount' => (int) $row->order_count,
                 'netRevenue' => round((float) $row->net, 2),
                 'counted' => in_array($row->status, $this->filters->statuses, true),
@@ -373,13 +376,25 @@ class SalesReport
      */
     private function currency(): string
     {
-        /** @var Collection<int, string> $currencies */
-        $currencies = $this->orders()->toBase()->distinct()->pluck('currency');
+        $currencies = $this->currencies();
 
-        return match ($currencies->count()) {
-            0 => '',
-            1 => (string) $currencies->first(),
-            default => 'MIXED',
-        };
+        return count($currencies) === 1 ? $currencies[0] : '';
+    }
+
+    /**
+     * Get every currency the filtered orders were taken in.
+     *
+     * More than one means there is no honest total to show: two currencies
+     * cannot be added together without a rate, and inventing one would put a
+     * number in front of a bookkeeper that reconciles against nothing.
+     *
+     * @return array<int, string>
+     */
+    public function currencies(): array
+    {
+        /** @var Collection<int, string> $currencies */
+        $currencies = $this->orders()->toBase()->distinct()->orderBy('currency')->pluck('currency');
+
+        return $currencies->filter()->values()->all();
     }
 }

@@ -47,6 +47,8 @@ export type Shop = {
     host: string;
     platform: ShopPlatform;
     platformLabel: string;
+    /** The currency the store sells in, once a connection check has read it. */
+    currency: string | null;
     consumerKeyHint: string;
     updatedAtDiff: string | null;
     connection: ShopConnection;

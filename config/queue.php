@@ -40,7 +40,11 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // Must outlast the longest job, or the queue treats a job that
+            // is still running as abandoned and hands it to the next worker,
+            // which then fails it for exceeding its attempts. The order sync
+            // may run for ten minutes; ninety seconds is nowhere near enough.
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 900),
             'after_commit' => false,
         ],
 

@@ -3,6 +3,7 @@
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\Organizations\OrganizationInvitationController;
+use App\Http\Controllers\Reports\OrderStatusController;
 use App\Http\Controllers\Reports\ReportController;
 use App\Http\Controllers\Reports\ReportExportController;
 use App\Http\Controllers\Shops\ShopConnectionController;
@@ -26,6 +27,8 @@ Route::prefix('{current_organization}')
         Route::get('reports', ReportController::class)->name('reports.index');
         Route::get('reports/export/orders', [ReportExportController::class, 'orders'])->name('reports.export.orders');
         Route::get('reports/export/line-items', [ReportExportController::class, 'items'])->name('reports.export.items');
+        Route::get('reports/statuses', [OrderStatusController::class, 'index'])->name('reports.statuses.index');
+        Route::patch('reports/statuses', [OrderStatusController::class, 'update'])->name('reports.statuses.update');
 
         Route::get('shops', [ShopController::class, 'index'])->name('shops.index');
         Route::post('shops', [ShopController::class, 'store'])->name('shops.store');

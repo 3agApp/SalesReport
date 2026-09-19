@@ -26,7 +26,7 @@ class OrderImporter
     private const array UPDATABLE = [
         'number', 'status', 'currency', 'total', 'total_tax', 'shipping_total',
         'shipping_tax', 'cart_tax', 'discount_total', 'discount_tax',
-        'refunded_total', 'customer_woo_id', 'customer_email', 'customer_name',
+        'refunded_total', 'refunded_tax', 'customer_woo_id', 'customer_email', 'customer_name',
         'billing_country', 'payment_method_title', 'placed_at', 'paid_at',
         'completed_at', 'woo_updated_at',
     ];
@@ -121,7 +121,8 @@ class OrderImporter
             'cart_tax' => $this->money(Arr::get($payload, 'cart_tax')),
             'discount_total' => $this->money(Arr::get($payload, 'discount_total')),
             'discount_tax' => $this->money(Arr::get($payload, 'discount_tax')),
-            'refunded_total' => $this->refundedTotal($payload),
+            'refunded_total' => $refundedTotal = $this->refundedTotal($payload),
+            'refunded_tax' => $this->refundedTax($payload, $refundedTotal, $this->money(Arr::get($payload, 'total')), $this->money(Arr::get($payload, 'total_tax'))),
             'customer_woo_id' => ((int) Arr::get($payload, 'customer_id', 0)) ?: null,
             'customer_email' => $this->string(Arr::get($payload, 'billing.email')),
             'customer_name' => $name !== '' ? Str::limit($name, 255, '') : null,
@@ -165,10 +166,49 @@ class OrderImporter
      */
     private function refundedTotal(array $payload): string
     {
+        return $this->sumRefunds($payload, 'total');
+    }
+
+    /**
+     * Work out how much of the refunded money was tax, as a positive amount.
+     *
+     * Without this a refunded order keeps its whole tax figure in the books
+     * long after the tax itself went back to the customer.
+     *
+     * A refund made outside WooCommerce's own flow — from a payment
+     * provider's dashboard, or by a plugin writing "order fully refunded" —
+     * often records the amount but leaves the tax at zero. Where the whole
+     * order went back, the whole tax did too: the customer paid nothing, so
+     * no tax is owed on it. That is arithmetic rather than a guess, and it is
+     * only applied to a full refund, because a partial one gives nothing to
+     * work out the split from.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function refundedTax(array $payload, string $refundedTotal, string $total, string $totalTax): string
+    {
+        $refundedTax = $this->sumRefunds($payload, 'total_tax');
+
+        $refundedInFull = (float) $refundedTotal > 0 && (float) $refundedTotal >= (float) $total;
+
+        if ($refundedInFull && (float) $refundedTax === 0.0) {
+            return $totalTax;
+        }
+
+        return $refundedTax;
+    }
+
+    /**
+     * Add up one field across an order's refunds, as a positive amount.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function sumRefunds(array $payload, string $field): string
+    {
         $total = 0.0;
 
         foreach (Arr::get($payload, 'refunds', []) as $refund) {
-            $total += abs((float) Arr::get((array) $refund, 'total', 0));
+            $total += abs((float) Arr::get((array) $refund, $field, 0));
         }
 
         return number_format($total, 4, '.', '');

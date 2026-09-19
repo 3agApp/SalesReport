@@ -17,7 +17,8 @@ class SyncOrders extends Command
      */
     protected $signature = 'shops:sync-orders
                             {--shop= : Only sync the shop with this id}
-                            {--force : Sync every shop, even recently synced ones}';
+                            {--force : Sync every shop, even recently synced ones}
+                            {--fresh : Forget where the sync got to and walk the whole history again}';
 
     /**
      * The console command description.
@@ -33,6 +34,10 @@ class SyncOrders extends Command
     {
         $syncAfter = now()->subMinutes((int) config('services.woocommerce.sync_after_minutes'));
         $queued = 0;
+
+        if ($this->option('fresh') && ! $this->confirmFresh()) {
+            return self::SUCCESS;
+        }
 
         Shop::query()
             ->when($this->option('shop'), fn (Builder $query, string $shop) => $query->whereKey($shop))
@@ -54,6 +59,18 @@ class SyncOrders extends Command
             ->with('syncState')
             ->chunkById(100, function ($shops) use (&$queued) {
                 foreach ($shops as $shop) {
+                    if ($this->option('fresh')) {
+                        // Orders are upserted, so re-walking the history
+                        // rewrites the rows in place rather than duplicating
+                        // them. This is how columns added after a sync, such
+                        // as the tax inside a refund, get filled in.
+                        $shop->syncStateOrCreate()->update([
+                            'backfill_cursor' => null,
+                            'backfill_completed_at' => null,
+                            'last_synced_at' => null,
+                        ]);
+                    }
+
                     SyncShopOrders::dispatch($shop);
                     $queued++;
                 }
@@ -62,5 +79,18 @@ class SyncOrders extends Command
         $this->components->info("Queued {$queued} order ".str('sync')->plural($queued).'.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Check that a full re-walk is really wanted.
+     *
+     * It re-reads every order a shop has ever had, which is thousands of
+     * requests against somebody's live store, so it is not something to set
+     * off by mistyping a flag.
+     */
+    private function confirmFresh(): bool
+    {
+        return ! $this->input->isInteractive()
+            || $this->confirm('This re-reads every order from the beginning. Continue?', false);
     }
 }

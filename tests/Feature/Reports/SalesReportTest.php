@@ -193,7 +193,8 @@ test('a range mixing currencies says so instead of adding them together', functi
     Order::factory()->for($shop)->create(['status' => 'completed', 'currency' => 'CHF', 'placed_at' => CarbonImmutable::parse('2026-03-10 12:00', 'Europe/Zurich')]);
     Order::factory()->for($shop)->create(['status' => 'completed', 'currency' => 'EUR', 'placed_at' => CarbonImmutable::parse('2026-03-11 12:00', 'Europe/Zurich')]);
 
-    expect((new SalesReport(filtersFor($organization, '2026-03-01', '2026-03-31')))->summary()['currency'])->toBe('MIXED');
+    expect((new SalesReport(filtersFor($organization, '2026-03-01', '2026-03-31')))->currencies())
+        ->toBe(['CHF', 'EUR']);
 });
 
 test('period presets resolve in the given timezone', function () {
@@ -220,4 +221,52 @@ test('period presets resolve in the given timezone', function () {
 
     expect($from->toDateString())->toBe('2026-01-01')
         ->and($to->toDateString())->toBe('2026-03-15');
+});
+
+test('tax is reported net of the tax that went back with a refund', function () {
+    $organization = Organization::factory()->create();
+    $shop = Shop::factory()->for($organization)->create();
+
+    Order::factory()->for($shop)->create([
+        'status' => 'completed',
+        'total' => 248.60,
+        'total_tax' => 18.63,
+        'refunded_total' => 149.90,
+        'refunded_tax' => 11.23,
+        'placed_at' => CarbonImmutable::parse('2026-03-10 12:00', 'Europe/Zurich'),
+    ]);
+
+    $summary = (new SalesReport(filtersFor($organization, '2026-03-01', '2026-03-31')))->summary();
+
+    // The customer kept CHF 98.70 of goods, so the shop owes tax on that and
+    // not on the part it refunded.
+    expect($summary['netRevenue'])->toBe(98.7)
+        ->and($summary['tax'])->toBe(7.4);
+});
+
+test('top products are counted on the same footing as the headline figure', function () {
+    $organization = Organization::factory()->create();
+    $shop = Shop::factory()->for($organization)->create();
+
+    $order = Order::factory()->for($shop)->create([
+        'status' => 'completed',
+        'total' => 107.70,
+        'total_tax' => 7.70,
+        'refunded_total' => 0,
+        'placed_at' => CarbonImmutable::parse('2026-03-10 12:00', 'Europe/Zurich'),
+    ]);
+
+    // A line item's own total leaves tax out while the order total includes
+    // it, so the panel would otherwise always sum to less than the headline.
+    OrderItem::factory()->for($order)->create([
+        'sku' => 'TRAIN-1',
+        'name' => 'Wooden train',
+        'quantity' => 1,
+        'total' => 100,
+        'total_tax' => 7.70,
+    ]);
+
+    $top = (new SalesReport(filtersFor($organization, '2026-03-01', '2026-03-31')))->topProducts();
+
+    expect($top[0]['revenue'])->toBe(107.7);
 });

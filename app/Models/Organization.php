@@ -98,6 +98,100 @@ class Organization extends Model
     }
 
     /**
+     * Get the order statuses this organization has decided something about.
+     *
+     * @return HasMany<OrderStatusSetting, $this>
+     */
+    public function orderStatusSettings(): HasMany
+    {
+        return $this->hasMany(OrderStatusSetting::class);
+    }
+
+    /**
+     * Get every order status seen in the organization's orders, with how many
+     * orders are sitting in each.
+     *
+     * Observed rather than assumed. WooCommerce ships with seven statuses but
+     * a store can register its own, and these ones do — "partial-complete",
+     * "planzer-transmit", "pre-ordered". There is no list to look them up in,
+     * so the orders are the list.
+     *
+     * @return array<string, int>
+     */
+    public function observedOrderStatuses(): array
+    {
+        /** @var array<string, int> $counts */
+        $counts = Order::query()
+            ->whereIn('shop_id', $this->shops()->select('id'))
+            ->selectRaw('status, count(*) as order_count')
+            ->groupBy('status')
+            // Busiest first, then alphabetically, so the list is stable
+            // rather than ordered by whatever the database returns.
+            ->orderByRaw('count(*) desc')
+            ->orderBy('status')
+            ->pluck('order_count', 'status')
+            ->all();
+
+        return $counts;
+    }
+
+    /**
+     * Get every order status a report can be filtered by, as slug => name.
+     *
+     * Everything the orders have ever used, plus anything already decided on,
+     * so a status keeps its name after the last order in it is archived away.
+     * Being a closed list is also what keeps a status typed into a query
+     * string from reaching a report.
+     *
+     * @return array<string, string>
+     */
+    public function orderStatuses(): array
+    {
+        $statuses = [];
+
+        foreach (array_keys($this->observedOrderStatuses()) as $slug) {
+            $statuses[$slug] = Order::statusLabel($slug);
+        }
+
+        foreach ($this->orderStatusSettings as $setting) {
+            $statuses[$setting->status] = $setting->displayLabel();
+        }
+
+        return $statuses;
+    }
+
+    /**
+     * Get the statuses whose orders count as money the organization has taken.
+     *
+     * Until somebody says otherwise, that is the two statuses where the
+     * payment demonstrably went through. An unanswered status counts for
+     * nothing rather than being quietly folded into revenue, so a report is
+     * never inflated by a status nobody has looked at.
+     *
+     * @return array<string>
+     */
+    public function revenueStatuses(): array
+    {
+        $decided = $this->orderStatusSettings
+            ->where('counts_as_revenue', true)
+            ->pluck('status')
+            ->all();
+
+        if ($decided !== []) {
+            return $decided;
+        }
+
+        // Narrowed to the statuses actually in use, so the filter does not
+        // report counting a status the interface never shows.
+        $fallback = array_values(array_intersect(
+            Order::SETTLED_STATUSES,
+            array_keys($this->observedOrderStatuses()),
+        ));
+
+        return $fallback === [] ? Order::SETTLED_STATUSES : $fallback;
+    }
+
+    /**
      * Get all shops belonging to this organization.
      *
      * @return HasMany<Shop, $this>
@@ -105,6 +199,25 @@ class Organization extends Model
     public function shops(): HasMany
     {
         return $this->hasMany(Shop::class);
+    }
+
+    /**
+     * Get the currencies the organization's shops sell in.
+     *
+     * One is the only workable answer. Totals in two currencies cannot be
+     * added together, so a second one has to be visible on the shops page
+     * rather than discovered halfway down a report.
+     *
+     * @return array<int, string>
+     */
+    public function shopCurrencies(): array
+    {
+        return $this->shops()
+            ->whereNotNull('currency')
+            ->distinct()
+            ->orderBy('currency')
+            ->pluck('currency')
+            ->all();
     }
 
     /**

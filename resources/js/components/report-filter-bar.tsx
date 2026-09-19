@@ -1,9 +1,10 @@
-import { router } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import {
     CalendarDays,
     Check,
     ChevronDown,
     Download,
+    SlidersHorizontal,
     Store,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -32,6 +33,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { index as reportsIndex } from '@/routes/reports';
+import { index as manageStatuses } from '@/routes/reports/statuses';
 import {
     items as exportItems,
     orders as exportOrders,
@@ -65,6 +67,23 @@ function toDateString(date: Date): string {
     return `${date.getFullYear()}-${month}-${day}`;
 }
 
+/**
+ * The first of the two months the calendar opens on.
+ *
+ * It follows the end of the range rather than the start, so a twelve month
+ * report does not open a year in the past and leave the bookkeeper paging
+ * forward before they can pick anything.
+ */
+function openingMonth(from?: Date, to?: Date): Date | undefined {
+    if (!to) {
+        return from;
+    }
+
+    const penultimate = new Date(to.getFullYear(), to.getMonth() - 1, 1);
+
+    return from && from > penultimate ? from : penultimate;
+}
+
 export default function ReportFilterBar({
     organizationSlug,
     filters,
@@ -73,6 +92,9 @@ export default function ReportFilterBar({
     statusOptions,
 }: Props) {
     const [calendarOpen, setCalendarOpen] = useState(false);
+    // The range being drawn, while only one of its ends has been clicked.
+    // Until both exist there is nothing to report on, so nothing is sent.
+    const [draftRange, setDraftRange] = useState<DateRange | undefined>();
 
     const query = {
         period: filters.period,
@@ -108,22 +130,27 @@ export default function ReportFilterBar({
     };
 
     const selectRange = (range: DateRange | undefined) => {
-        if (!range?.from) {
+        setDraftRange(range);
+
+        // A half-drawn range would otherwise be reported on as a single day,
+        // and the picker would close before the second end was ever clicked.
+        if (!range?.from || !range.to) {
             return;
         }
+
+        setDraftRange(undefined);
+        setCalendarOpen(false);
 
         apply({
             period: 'custom',
             from: toDateString(range.from),
-            to: toDateString(range.to ?? range.from),
+            to: toDateString(range.to),
         });
-
-        if (range.to) {
-            setCalendarOpen(false);
-        }
     };
 
     const allShopsSelected = filters.shopIds.length === shops.length;
+    const appliedFrom = parseDate(filters.from);
+    const appliedTo = parseDate(filters.to);
 
     return (
         <div className="flex flex-wrap items-center gap-2">
@@ -145,7 +172,18 @@ export default function ReportFilterBar({
                 </SelectContent>
             </Select>
 
-            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <Popover
+                open={calendarOpen}
+                onOpenChange={(open) => {
+                    setCalendarOpen(open);
+
+                    // An abandoned half-drawn range must not survive into the
+                    // next time the picker is opened.
+                    if (!open) {
+                        setDraftRange(undefined);
+                    }
+                }}
+            >
                 <PopoverTrigger asChild>
                     <Button
                         variant="outline"
@@ -160,11 +198,15 @@ export default function ReportFilterBar({
                     <Calendar
                         mode="range"
                         numberOfMonths={2}
-                        defaultMonth={parseDate(filters.from)}
-                        selected={{
-                            from: parseDate(filters.from),
-                            to: parseDate(filters.to),
-                        }}
+                        // Without this, a click on a day with a range already
+                        // applied only drags that range's end along: the start
+                        // stays wherever the last report left it, and no
+                        // amount of clicking can move it.
+                        resetOnSelect
+                        defaultMonth={openingMonth(appliedFrom, appliedTo)}
+                        selected={
+                            draftRange ?? { from: appliedFrom, to: appliedTo }
+                        }
                         onSelect={selectRange}
                         autoFocus
                     />
@@ -224,6 +266,11 @@ export default function ReportFilterBar({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-56">
                     <DropdownMenuLabel>Counted as revenue</DropdownMenuLabel>
+                    {statusOptions.length === 0 ? (
+                        <p className="text-muted-foreground px-2 py-1.5 text-xs">
+                            No orders imported yet.
+                        </p>
+                    ) : null}
                     {statusOptions.map((status) => (
                         <DropdownMenuCheckboxItem
                             key={status.value}
@@ -234,6 +281,15 @@ export default function ReportFilterBar({
                             {status.label}
                         </DropdownMenuCheckboxItem>
                     ))}
+                    <DropdownMenuSeparator />
+                    {/* Each shop names its own statuses, so what a slug like
+                        "partial-complete" means to the books is a question
+                        only the organization can answer. */}
+                    <DropdownMenuItem asChild>
+                        <Link href={manageStatuses(organizationSlug)}>
+                            <SlidersHorizontal /> Manage statuses
+                        </Link>
+                    </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
 

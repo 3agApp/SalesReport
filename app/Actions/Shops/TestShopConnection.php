@@ -53,11 +53,40 @@ class TestShopConnection
             );
         }
 
+        $status = $this->statusFor($response);
+
         return ShopConnectionResult::for(
-            $this->statusFor($response),
+            $status,
             $this->detailFrom($response),
             $this->elapsedMs($startedAt),
+            // Asked once and then remembered. A store's currency changes
+            // about never, an hourly check should not pay for a second
+            // request to hear the same answer, and if one ever did change
+            // the orders would carry the new one and the report would say so.
+            $status->isHealthy() && $shop->currency === null ? $this->currencyOf($shop) : null,
         );
+    }
+
+    /**
+     * Ask the store which currency it sells in.
+     *
+     * Totals in two currencies cannot be added together, so knowing this per
+     * shop is what lets the interface say so before a report tries. A store
+     * that will not answer simply stays unknown; it is not a failed check.
+     */
+    private function currencyOf(Shop $shop): ?string
+    {
+        try {
+            // Without _fields the store returns its whole currency list,
+            // some twenty kilobytes of it, on every hourly check.
+            $response = $this->client->get($shop, 'settings/general/woocommerce_currency', ['_fields' => 'id,value']);
+        } catch (ConnectionException) {
+            return null;
+        }
+
+        $currency = $response->successful() ? $response->json('value') : null;
+
+        return is_string($currency) && preg_match('/^[A-Z]{3}$/', $currency) === 1 ? $currency : null;
     }
 
     /**
