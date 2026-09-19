@@ -22,15 +22,19 @@ test('login with an invitation stores it for after sso', function () {
 });
 
 test('the accounts sso button redirects guests to the identity provider', function () {
-    $redirect = redirect()->away('http://127.0.0.1:8000/oauth/authorize');
+    $redirect = redirect()->away('http://127.0.0.1:8000/oauth/authorize?prompt=consent');
 
     Socialite::shouldReceive('driver')
         ->with('oidc_accounts')
         ->andReturnSelf();
+    Socialite::shouldReceive('with')
+        ->once()
+        ->with(['prompt' => 'consent'])
+        ->andReturnSelf();
     Socialite::shouldReceive('redirect')->andReturn($redirect);
 
     $this->get(route('auth.accounts.redirect'))
-        ->assertRedirect('http://127.0.0.1:8000/oauth/authorize');
+        ->assertRedirect('http://127.0.0.1:8000/oauth/authorize?prompt=consent');
 });
 
 test('the accounts callback creates a local user and signs them in', function () {

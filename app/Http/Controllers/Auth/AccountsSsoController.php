@@ -19,10 +19,15 @@ class AccountsSsoController extends Controller
 
     /**
      * Send the guest to 3AG Accounts for login.
+     *
+     * prompt=consent forces Accounts to show the continue-as / switch-account
+     * screen even when the browser already has an Accounts session.
      */
     public function redirect(): SymfonyRedirectResponse
     {
-        return Socialite::driver('oidc_accounts')->redirect();
+        return Socialite::driver('oidc_accounts')
+            ->with(['prompt' => 'consent'])
+            ->redirect();
     }
 
     /**
