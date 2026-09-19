@@ -2,6 +2,8 @@
 
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Exceptions;
+use InvalidArgumentException;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\AbstractProvider;
 use Laravel\Socialite\Two\User as SocialiteUser;
@@ -39,6 +41,20 @@ test('the accounts sso button redirects guests to the identity provider', functi
 
     $this->get(route('auth.accounts.redirect'))
         ->assertRedirect('http://127.0.0.1:8000/oauth/authorize?prompt=consent');
+});
+
+test('a misconfigured identity provider sends the guest home instead of erroring', function () {
+    Exceptions::fake();
+
+    Socialite::shouldReceive('driver')
+        ->with('oidc_accounts')
+        ->andThrow(new InvalidArgumentException('OIDC: base_url is not configured.'));
+
+    $this->get(route('auth.accounts.redirect'))
+        ->assertRedirect('/')
+        ->assertSessionHas('status');
+
+    Exceptions::assertReported(InvalidArgumentException::class);
 });
 
 test('the accounts callback creates a local user and signs them in', function () {

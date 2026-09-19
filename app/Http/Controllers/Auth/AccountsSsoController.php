@@ -24,16 +24,28 @@ class AccountsSsoController extends Controller
      *
      * prompt=consent forces Accounts to show the continue-as / switch-account
      * screen even when the browser already has an Accounts session.
+     *
+     * Building the provider reaches out to the issuer for its discovery
+     * document, so an unreachable or misconfigured Accounts takes the whole
+     * login route down with it. Report it and send the guest back to the
+     * homepage with a message, as the callback already does.
      */
     public function redirect(): SymfonyRedirectResponse
     {
-        $provider = Socialite::driver('oidc_accounts');
+        try {
+            $provider = Socialite::driver('oidc_accounts');
 
-        if (! $provider instanceof AbstractProvider) {
-            throw new RuntimeException('The oidc_accounts driver must be an OAuth 2 provider.');
+            if (! $provider instanceof AbstractProvider) {
+                throw new RuntimeException('The oidc_accounts driver must be an OAuth 2 provider.');
+            }
+
+            return $provider->with(['prompt' => 'consent'])->redirect();
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return redirect('/')
+                ->with('status', __('Could not sign in with 3AG Accounts. Please try again.'));
         }
-
-        return $provider->with(['prompt' => 'consent'])->redirect();
     }
 
     /**
