@@ -37,10 +37,21 @@ class ImportShopOrders
         $state = $shop->syncStateOrCreate();
         $startedAt = now();
 
-        $state->update([
+        $attributes = [
             'status' => $state->hasBackfilled() ? ShopSyncStatus::Syncing : ShopSyncStatus::Backfilling,
             'last_error' => null,
-        ]);
+        ];
+
+        // Where the incremental pass will pick up once the history is in. It
+        // is set when the backfill begins rather than when it ends, because
+        // walking years of orders takes hours or days: an order refunded
+        // while the walk was still somewhere behind it went in at its old
+        // figures, and a mark set at the end would never look at it again.
+        if (! $state->hasBackfilled() && $state->last_synced_at === null) {
+            $attributes['last_synced_at'] = $startedAt;
+        }
+
+        $state->update($attributes);
 
         try {
             $result = $state->hasBackfilled()
@@ -66,6 +77,7 @@ class ImportShopOrders
     private function runBackfillPass(Shop $shop, ShopSyncState $state): ShopSyncResult
     {
         $cursor = $state->backfill_cursor;
+        $offset = $state->backfill_offset;
         $imported = 0;
         $pages = 0;
         $runStartedAt = microtime(true);
@@ -83,6 +95,10 @@ class ImportShopOrders
                 $query['after'] = $cursor->subSecond()->toIso8601String();
             }
 
+            if ($offset > 0) {
+                $query['offset'] = $offset;
+            }
+
             $payloads = $this->fetchPage($shop, $query);
             $pages++;
 
@@ -94,16 +110,22 @@ class ImportShopOrders
             $furthest = $this->furthestTimestamp($payloads, 'date_created_gmt');
 
             if ($cursor instanceof CarbonImmutable && $furthest !== null && $furthest->lessThanOrEqualTo($cursor)) {
-                // A whole page sharing one second would leave the cursor
-                // standing still and the backfill looping. Stop and say so
-                // rather than spin or silently skip the orders involved.
-                throw new RuntimeException(
-                    'The import stalled: a full page of orders shares the timestamp '.$cursor->toDateTimeString().'.'
-                );
+                // A whole page sharing one second. The date cursor cannot
+                // move without skipping the orders sitting on it, so step
+                // over the ones already read by offset and leave the cursor
+                // where it is. A store that was bulk migrated puts thousands
+                // of orders on a single timestamp, and refusing to go on
+                // would wedge its history for good.
+                $offset += count($payloads);
+            } else {
+                $cursor = $furthest ?? $cursor;
+                $offset = 0;
             }
 
-            $cursor = $furthest ?? $cursor;
-            $state->update(['backfill_cursor' => $cursor]);
+            // Both together: the offset only means anything alongside the
+            // cursor it counts from, and a run that stops here has to be
+            // able to pick up mid-second rather than start that second again.
+            $state->update(['backfill_cursor' => $cursor, 'backfill_offset' => $offset]);
 
             if (count($payloads) < $this->pageSize()) {
                 return $this->completeBackfill($state, $imported, $pages);
@@ -195,10 +217,9 @@ class ImportShopOrders
      */
     private function completeBackfill(ShopSyncState $state, int $imported, int $pages): ShopSyncResult
     {
-        $state->update([
-            'backfill_completed_at' => now(),
-            'last_synced_at' => now(),
-        ]);
+        // `last_synced_at` is deliberately left where the first backfill run
+        // put it; see handle().
+        $state->update(['backfill_completed_at' => now(), 'backfill_offset' => 0]);
 
         return new ShopSyncResult(
             status: ShopSyncStatus::Synced,

@@ -32,7 +32,7 @@ class ReportExportController extends Controller
             'Total', 'Tax', 'Shipping', 'Discount', 'Refunded', 'Refunded tax', 'Net', 'Net tax',
             'Customer', 'Email', 'Country', 'Payment method',
         ], function () use ($report, $shopNames, $filters) {
-            foreach ($report->ordersForExport()->lazyById(500) as $order) {
+            foreach ($report->ordersForExport() as $order) {
                 /** @var Order $order */
                 yield [
                     $shopNames[$order->shop_id] ?? '',
@@ -70,7 +70,7 @@ class ReportExportController extends Controller
             'Shop', 'Order', 'Order status', 'Placed at', 'Currency',
             'SKU', 'Product', 'Quantity', 'Subtotal', 'Total', 'Tax',
         ], function () use ($report, $shopNames, $filters) {
-            foreach ($report->itemsForExport()->lazyById(500, 'order_items.id') as $item) {
+            foreach ($report->itemsForExport() as $item) {
                 /** @var OrderItem $item */
                 yield [
                     $shopNames[$item->getAttribute('shop_id')] ?? '',
@@ -110,11 +110,28 @@ class ReportExportController extends Controller
             fputcsv($handle, $headings);
 
             foreach ($rows() as $row) {
-                fputcsv($handle, $row);
+                fputcsv($handle, array_map($this->defuse(...), $row));
             }
 
             fclose($handle);
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
+     * Stop a spreadsheet treating a value as a formula.
+     *
+     * Customer and product names arrive from somebody else's shop, and Excel
+     * runs a cell beginning with = + - or @ the moment the file is opened. A
+     * leading apostrophe makes it text again. Numbers are left alone, or
+     * every negative figure in the file would turn into a string.
+     */
+    private function defuse(mixed $value): mixed
+    {
+        if (! is_string($value) || $value === '' || is_numeric($value)) {
+            return $value;
+        }
+
+        return Str::startsWith($value, ['=', '+', '-', '@', "\t", "\r"]) ? "'".$value : $value;
     }
 
     /**

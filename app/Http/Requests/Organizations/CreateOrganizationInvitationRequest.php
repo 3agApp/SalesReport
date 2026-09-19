@@ -24,7 +24,10 @@ class CreateOrganizationInvitationRequest extends FormRequest
 
         return [
             'email' => ['required', 'string', 'email', 'max:255', new UniqueOrganizationInvitation($organization)],
-            'role' => ['required', 'string', Rule::enum(OrganizationRole::class)],
+            // Assignable roles only. An organization has exactly one owner,
+            // and inviting a second one would hand out every permission the
+            // inviter has, including deleting the organization.
+            'role' => ['required', 'string', Rule::in(array_column(OrganizationRole::assignable(), 'value'))],
         ];
     }
 }

@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $shop_id
  * @property ShopSyncStatus $status
  * @property CarbonImmutable|null $backfill_cursor
+ * @property int $backfill_offset
  * @property CarbonImmutable|null $backfill_completed_at
  * @property CarbonImmutable|null $last_synced_at
  * @property CarbonImmutable|null $last_finished_at
@@ -26,7 +27,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property-read Shop $shop
  */
 #[Fillable([
-    'status', 'backfill_cursor', 'backfill_completed_at',
+    'status', 'backfill_cursor', 'backfill_offset', 'backfill_completed_at',
     'last_synced_at', 'last_finished_at', 'last_error',
 ])]
 class ShopSyncState extends Model
@@ -62,6 +63,7 @@ class ShopSyncState extends Model
         return [
             'status' => ShopSyncStatus::class,
             'backfill_cursor' => 'datetime',
+            'backfill_offset' => 'integer',
             'backfill_completed_at' => 'datetime',
             'last_synced_at' => 'datetime',
             'last_finished_at' => 'datetime',

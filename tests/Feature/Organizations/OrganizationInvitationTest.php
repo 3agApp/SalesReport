@@ -311,3 +311,29 @@ test('expired invitations cannot be accepted', function () {
 
     expect($invitedUser->fresh()->belongsToOrganization($organization))->toBeFalse();
 });
+
+test('nobody can invite a second organization owner', function () {
+    Notification::fake();
+
+    $owner = User::factory()->create();
+    $admin = User::factory()->create();
+    $organization = Organization::factory()->create();
+
+    $organization->members()->attach($owner, ['role' => OrganizationRole::Owner->value]);
+    $organization->members()->attach($admin, ['role' => OrganizationRole::Admin->value]);
+
+    // An admin may invite people, so without this the role field is a way to
+    // hand themselves a second account with every owner permission.
+    foreach ([$admin, $owner] as $inviter) {
+        $this
+            ->actingAs($inviter)
+            ->post(route('organizations.invitations.store', $organization), [
+                'email' => 'outsider@example.com',
+                'role' => OrganizationRole::Owner->value,
+            ])
+            ->assertSessionHasErrors('role');
+    }
+
+    $this->assertDatabaseCount('organization_invitations', 0);
+    Notification::assertNothingSent();
+});

@@ -9,6 +9,7 @@ use App\Models\OrderItem;
 use App\Models\Organization;
 use App\Models\Shop;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -653,4 +654,99 @@ test('a run within its budget still walks the whole history', function () {
     expect($result->hasMore)->toBeFalse()
         ->and($result->status)->toBe(ShopSyncStatus::Synced)
         ->and($result->importedCount)->toBe(2);
+});
+
+test('the incremental pass reaches back to when the backfill started', function () {
+    config(['services.woocommerce.sync_page_size' => 1, 'services.woocommerce.sync_max_pages_per_run' => 1]);
+
+    Http::fake(['toysonline.test/*' => Http::response([wooOrder(1)])]);
+
+    $shop = syncableShop();
+    $startedAt = CarbonImmutable::parse('2026-02-01 08:00:00', 'UTC');
+
+    // A history long enough to span more than one run, the way a real one does.
+    $this->travelTo($startedAt);
+    app(ImportShopOrders::class)->handle($shop);
+
+    $this->travelTo($startedAt->addHours(6));
+    Http::fake(['toysonline.test/*' => Http::response([])]);
+    app(ImportShopOrders::class)->handle($shop);
+
+    // An order refunded at 09:00, while the walk was still somewhere behind
+    // it, went in at its old figures. A mark set when the backfill finished
+    // would ask for changes since 14:00 and never look at it again.
+    expect($shop->syncState()->sole()->last_synced_at->toDateTimeString())
+        ->toBe($startedAt->toDateTimeString());
+});
+
+test('a backfill gets past a whole page of orders sharing one second', function () {
+    config(['services.woocommerce.sync_page_size' => 2]);
+
+    $sameSecond = ['date_created_gmt' => '2026-01-10T09:00:00'];
+
+    Http::fake([
+        'toysonline.test/*' => Http::sequence()
+            ->push([wooOrder(1, $sameSecond), wooOrder(2, $sameSecond)])
+            ->push([wooOrder(3, $sameSecond), wooOrder(4, $sameSecond)])
+            ->push([wooOrder(5, ['date_created_gmt' => '2026-01-11T09:00:00'])]),
+    ]);
+
+    $shop = syncableShop();
+
+    $result = app(ImportShopOrders::class)->handle($shop);
+
+    // A bulk-migrated store can easily put a hundred orders in one second.
+    // Stopping there would wedge the shop's history for good.
+    expect($result->status)->toBe(ShopSyncStatus::Synced)
+        ->and($shop->orders()->count())->toBe(5)
+        ->and($shop->syncState()->sole()->last_error)->toBeNull();
+});
+
+test('a backfill resumes mid second when a run ends inside one', function () {
+    config([
+        'services.woocommerce.sync_page_size' => 2,
+        'services.woocommerce.sync_max_pages_per_run' => 2,
+    ]);
+
+    $sameSecond = ['date_created_gmt' => '2026-01-10T09:00:00'];
+
+    Http::fake([
+        'toysonline.test/*' => Http::sequence()
+            ->push([wooOrder(1, $sameSecond), wooOrder(2, $sameSecond)])
+            ->push([wooOrder(3, $sameSecond), wooOrder(4, $sameSecond)])
+            ->push([wooOrder(5, ['date_created_gmt' => '2026-01-11T09:00:00'])]),
+    ]);
+
+    $shop = syncableShop();
+
+    // The run stops after two pages, both of them inside the same second.
+    expect(app(ImportShopOrders::class)->handle($shop)->hasMore)->toBeTrue()
+        ->and($shop->syncState()->sole()->backfill_offset)->toBe(2);
+
+    // The next run carries on from inside that second rather than reading it
+    // from the top again, which is what would never finish.
+    $result = app(ImportShopOrders::class)->handle($shop);
+
+    expect($result->status)->toBe(ShopSyncStatus::Synced)
+        ->and($shop->orders()->count())->toBe(5);
+
+    Http::assertSent(fn (Request $request) => str_contains($request->url(), 'offset=2'));
+});
+
+test('an order whose line items arrive without ids still imports', function () {
+    Http::fake(['toysonline.test/*' => Http::response([wooOrder(1, ['line_items' => [
+        ['name' => 'Wooden train', 'quantity' => 1, 'total' => '50.00'],
+        ['name' => 'Rag doll', 'quantity' => 1, 'total' => '30.00'],
+    ]])])]);
+
+    $shop = syncableShop();
+
+    $result = app(ImportShopOrders::class)->handle($shop);
+
+    // Both lines fall back to a woo id of zero and would collide on the
+    // order's unique index. Losing the second line is a great deal better
+    // than rolling back the page the order came in on.
+    expect($result->status)->toBe(ShopSyncStatus::Synced)
+        ->and($shop->orders()->count())->toBe(1)
+        ->and($shop->orders()->sole()->items()->count())->toBe(1);
 });

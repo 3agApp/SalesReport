@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Organizations;
 
 use App\Actions\Organizations\CreateOrganization;
+use App\Actions\Organizations\DeleteOrganization;
 use App\Enums\OrganizationRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Organizations\DeleteOrganizationRequest;
@@ -102,10 +103,11 @@ class OrganizationController extends Controller
         $organization = DB::transaction(function () use ($request, $organization) {
             $organization = Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();
 
-            $organization->update(array_filter([
-                'name' => $request->validated('name'),
-                'timezone' => $request->validated('timezone'),
-            ], fn (mixed $value) => $value !== null));
+            // Only what the caller actually sent. Creation posts a name and
+            // nothing else, which must not wipe the timezone, while settings
+            // posts a timezone that may deliberately be empty to go back to
+            // the application default.
+            $organization->update($request->safe()->only(['name', 'timezone']));
 
             return $organization;
         });
@@ -152,19 +154,14 @@ class OrganizationController extends Controller
     /**
      * Delete the specified organization.
      */
-    public function destroy(DeleteOrganizationRequest $request, Organization $organization): RedirectResponse
-    {
+    public function destroy(
+        DeleteOrganizationRequest $request,
+        Organization $organization,
+        DeleteOrganization $deleteOrganization,
+    ): RedirectResponse {
         $user = $request->user();
 
-        DB::transaction(function () use ($user, $organization) {
-            User::where('current_organization_id', $organization->id)
-                ->where('id', '!=', $user->id)
-                ->each(fn (User $affectedUser) => $affectedUser->switchToFallbackOrganization($organization));
-
-            $organization->invitations()->delete();
-            $organization->memberships()->delete();
-            $organization->delete();
-        });
+        $deleteOrganization->handle($organization, keeping: $user);
 
         if ($user->isCurrentOrganization($organization)) {
             $user->switchToFallbackOrganization($organization);

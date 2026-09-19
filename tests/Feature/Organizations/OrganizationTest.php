@@ -1,8 +1,11 @@
 <?php
 
 use App\Enums\OrganizationRole;
+use App\Models\Order;
 use App\Models\Organization;
+use App\Models\Shop;
 use App\Models\User;
+use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('the organizations index page can be rendered', function () {
@@ -375,4 +378,73 @@ test('guests cannot access organizations', function () {
     $response = $this->get(route('organizations.index'));
 
     $response->assertRedirect(route('login'));
+});
+
+test('deleting an organization takes its shops and orders with it', function () {
+    Queue::fake();
+
+    $owner = User::factory()->create();
+    $organization = $owner->currentOrganization;
+    $shop = Shop::factory()->for($organization)->create();
+    Order::factory()->count(2)->for($shop)->create();
+
+    $this
+        ->actingAs($owner)
+        ->delete(route('organizations.destroy', $organization), ['name' => $organization->name])
+        ->assertRedirect();
+
+    expect(Shop::count())->toBe(0)
+        ->and(Order::count())->toBe(0);
+
+    // The credentials are gone, so nothing is left for the scheduler to call
+    // a stranger's shop with every quarter of an hour.
+    $this->artisan('shops:check-connections');
+    $this->artisan('shops:sync-orders');
+
+    Queue::assertNothingPushed();
+});
+
+test('a shop whose organization is gone is never called again', function () {
+    Queue::fake();
+
+    $organization = Organization::factory()->create();
+    Shop::factory()->for($organization)->create();
+
+    $organization->delete();
+
+    $this->artisan('shops:check-connections');
+    $this->artisan('shops:sync-orders');
+
+    Queue::assertNothingPushed();
+});
+
+test('an organization can be put back on the application default timezone', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $organization->update(['timezone' => 'Europe/Zurich']);
+
+    $this
+        ->actingAs($user)
+        ->patch(route('organizations.update', $organization), [
+            'name' => $organization->name,
+            'timezone' => null,
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($organization->fresh()->timezone)->toBeNull()
+        ->and($organization->fresh()->reportingTimezone())->toBe(config('app.reporting_timezone'));
+});
+
+test('creating an organization does not clear a timezone it never sent', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $organization->update(['timezone' => 'Europe/Zurich']);
+
+    // The settings form posts a name on its own when only the name changed.
+    $this
+        ->actingAs($user)
+        ->patch(route('organizations.update', $organization), ['name' => 'Renamed Group'])
+        ->assertSessionHasNoErrors();
+
+    expect($organization->fresh()->timezone)->toBe('Europe/Zurich');
 });

@@ -5,6 +5,7 @@ namespace App\Http\Requests\Shops;
 use App\Enums\ShopPlatform;
 use App\Models\Organization;
 use App\Models\Shop;
+use App\Rules\PublicShopUrl;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -53,6 +54,7 @@ class SaveShopRequest extends FormRequest
                 'string',
                 'max:255',
                 'url:http,https',
+                app(PublicShopUrl::class),
                 Rule::unique(Shop::class)
                     ->where('organization_id', $this->organization()->id)
                     ->ignore($this->shop()?->id),

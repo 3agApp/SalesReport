@@ -34,6 +34,8 @@ class CheckShopConnections extends Command
         $queued = 0;
 
         Shop::query()
+            // A shop whose organization has been deleted is nobody's to check.
+            ->whereHas('organization')
             ->when($this->option('shop'), fn (Builder $query, string $shop) => $query->whereKey($shop))
             ->unless($this->option('force'), fn (Builder $query) => $query->where(fn (Builder $query) => $query
                 ->whereNull('connection_checked_at')
