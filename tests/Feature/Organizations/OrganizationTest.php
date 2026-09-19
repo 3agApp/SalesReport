@@ -448,3 +448,25 @@ test('creating an organization does not clear a timezone it never sent', functio
 
     expect($organization->fresh()->timezone)->toBe('Europe/Zurich');
 });
+
+test('renaming an organization leaves its address alone', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $organization->update(['name' => 'Toys Online Group']);
+    $slug = $organization->fresh()->slug;
+
+    $this
+        ->actingAs($user)
+        ->patch(route('organizations.update', $organization), ['name' => 'Toys Online Holding'])
+        ->assertSessionHasNoErrors();
+
+    // Every report link a bookkeeper has saved, and every invitation already
+    // sent, is built on this slug.
+    expect($organization->fresh()->name)->toBe('Toys Online Holding')
+        ->and($organization->fresh()->slug)->toBe($slug);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', ['current_organization' => $slug]))
+        ->assertOk();
+});
