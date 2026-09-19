@@ -52,7 +52,7 @@ test('a misconfigured identity provider sends the guest home instead of erroring
 
     $this->get(route('auth.accounts.redirect'))
         ->assertRedirect('/')
-        ->assertSessionHas('status');
+        ->assertInertiaFlash('toast.type', 'error');
 
     Exceptions::assertReported(InvalidArgumentException::class);
 });

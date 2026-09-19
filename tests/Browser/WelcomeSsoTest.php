@@ -10,20 +10,30 @@ test('homepage login and get started use full-page links to sso', function () {
         ->assertNoJavaScriptErrors();
 });
 
-test('clicking log in on the homepage navigates away from the welcome page', function () {
+/**
+ * An Inertia <Link> renders a plain anchor too, so the href alone proves nothing.
+ * Only a real document load tells them apart: it discards whatever the previous
+ * window held. Here the CTA leaves the SPA, fails to reach an identity provider
+ * (there is none under test), and returns to the homepage with an error toast --
+ * so the toast is what marks the end of the round trip.
+ */
+function assertClickLeavesTheSpa(string $selector): void
+{
     $page = visit('/');
 
-    // Plain <a href="/login"> must full-page navigate. An Inertia <Link> to /login
-    // would soft-navigate into the OIDC redirect chain and appear to do nothing.
-    $page->click('@sso-login')
-        ->assertPathIsNot('/')
+    $page->script('window.ssoNavigationProbe = true');
+
+    $page->click($selector)
+        ->assertSee('Could not sign in with 3AG Accounts')
         ->assertNoJavaScriptErrors();
+
+    expect($page->script('window.ssoNavigationProbe ?? false'))->toBeFalse();
+}
+
+test('clicking log in on the homepage leaves the spa', function () {
+    assertClickLeavesTheSpa('@sso-login');
 });
 
-test('clicking get started on the homepage navigates away from the welcome page', function () {
-    $page = visit('/');
-
-    $page->click('@sso-get-started')
-        ->assertPathIsNot('/')
-        ->assertNoJavaScriptErrors();
+test('clicking get started on the homepage leaves the spa', function () {
+    assertClickLeavesTheSpa('@sso-get-started');
 });

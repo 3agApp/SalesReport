@@ -9,6 +9,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Inertia\Inertia;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\AbstractProvider;
 use RuntimeException;
@@ -43,8 +44,7 @@ class AccountsSsoController extends Controller
         } catch (Throwable $exception) {
             report($exception);
 
-            return redirect('/')
-                ->with('status', __('Could not sign in with 3AG Accounts. Please try again.'));
+            return $this->failed(__('Could not sign in with 3AG Accounts. Please try again.'));
         }
     }
 
@@ -58,15 +58,13 @@ class AccountsSsoController extends Controller
         } catch (Throwable $exception) {
             report($exception);
 
-            return redirect('/')
-                ->with('status', __('Could not sign in with 3AG Accounts. Please try again.'));
+            return $this->failed(__('Could not sign in with 3AG Accounts. Please try again.'));
         }
 
         $email = $oidcUser->getEmail();
 
         if (! filled($email)) {
-            return redirect('/')
-                ->with('status', __('3AG Accounts did not return an email address.'));
+            return $this->failed(__('3AG Accounts did not return an email address.'));
         }
 
         $user = User::query()->where('sso_id', $oidcUser->getId())->first()
@@ -100,5 +98,15 @@ class AccountsSsoController extends Controller
         return redirect()->intended(
             $this->redirectPathForCurrentOrganization(request(), '/dashboard'),
         );
+    }
+
+    /**
+     * Send the guest back to the homepage with a toast explaining the failure.
+     */
+    private function failed(string $message): RedirectResponse
+    {
+        Inertia::flash('toast', ['type' => 'error', 'message' => $message]);
+
+        return redirect('/');
     }
 }
