@@ -358,8 +358,13 @@ test('the chart and the per shop trends are read off one walk of the orders', fu
 
     // The only figure costing a row of work per order, rather than per
     // bucket, should be paid for once however many panels want it.
+    // SQLite quotes identifiers with double quotes and MySQL with backticks,
+    // and the suite runs on both, so compare against an unquoted column list.
     $walks = collect(DB::connection()->getQueryLog())
-        ->filter(fn (array $query) => str_contains($query['query'], '"shop_id", "placed_at", "total", "refunded_total"'))
+        ->filter(fn (array $query) => str_contains(
+            str_replace(['"', '`'], '', $query['query']),
+            'shop_id, placed_at, total, refunded_total'
+        ))
         ->count();
 
     expect($walks)->toBe(1);
