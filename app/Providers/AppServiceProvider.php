@@ -2,11 +2,13 @@
 
 namespace App\Providers;
 
+use App\Services\Auth\ThreeAgProvider;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Socialite\Facades\Socialite;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -24,6 +26,17 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureSingleSignOn();
+    }
+
+    /**
+     * Register 3AG Accounts as a Socialite driver.
+     */
+    protected function configureSingleSignOn(): void
+    {
+        Socialite::extend('3ag', fn ($app) => Socialite::buildProvider(
+            ThreeAgProvider::class, $app['config']['services.3ag']
+        ));
     }
 
     /**

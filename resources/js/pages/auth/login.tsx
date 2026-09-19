@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { register } from '@/routes';
+import { redirect as threeAgRedirect } from '@/routes/auth/accounts';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
 import PasskeyVerify from '@/components/passkey-verify';
@@ -35,6 +36,23 @@ export default function Login({
                     action="Log in"
                 />
             )}
+
+            <div className="mb-2 grid gap-2">
+                <Button asChild variant="outline" className="w-full">
+                    <a
+                        href={threeAgRedirect.url()}
+                        data-test="3ag-login-button"
+                    >
+                        <span
+                            aria-hidden="true"
+                            className="bg-foreground text-background flex size-4 items-center justify-center rounded-[3px] text-[10px] font-bold"
+                        >
+                            3
+                        </span>
+                        Sign in with 3AG Accounts
+                    </a>
+                </Button>
+            </div>
 
             <PasskeyVerify />
 

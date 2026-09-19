@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Auth\ThreeAgCallbackController;
+use App\Http\Controllers\Auth\ThreeAgRedirectController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\Organizations\OrganizationInvitationController;
@@ -13,6 +15,21 @@ use App\Http\Middleware\EnsureOrganizationMembership;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
+
+/*
+|--------------------------------------------------------------------------
+| Sign in with 3AG Accounts
+|--------------------------------------------------------------------------
+|
+| The OpenID Connect flow against accounts.3ag.app. Throttled because both
+| routes reach out to the identity provider.
+|
+*/
+
+Route::middleware('throttle:20,1')->group(function (): void {
+    Route::get('auth/accounts/redirect', ThreeAgRedirectController::class)->name('auth.accounts.redirect');
+    Route::get('auth/accounts/callback', ThreeAgCallbackController::class)->name('auth.accounts.callback');
+});
 
 Route::get('onboarding', OnboardingController::class)
     ->middleware(['auth', 'verified'])

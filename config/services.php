@@ -14,6 +14,28 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | 3AG Accounts
+    |--------------------------------------------------------------------------
+    |
+    | The OpenID Connect provider at accounts.3ag.app that signs users in to
+    | every 3AG product. `base_url` is the issuer; the other values come from
+    | the client registered there for this app.
+    |
+    */
+
+    '3ag' => [
+        'base_url' => env('THREE_AG_BASE_URL', 'http://localhost:8000'),
+        'client_id' => env('THREE_AG_CLIENT_ID'),
+        'client_secret' => env('THREE_AG_CLIENT_SECRET'),
+        'redirect' => env('THREE_AG_REDIRECT_URI', env('APP_URL').'/auth/accounts/callback'),
+
+        // Turning this on removes this app's own login, registration and
+        // password reset, leaving 3AG Accounts as the only way in.
+        'sso_only' => (bool) env('THREE_AG_SSO_ONLY', false),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],
