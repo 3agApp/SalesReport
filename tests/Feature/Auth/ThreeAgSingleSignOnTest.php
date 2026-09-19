@@ -149,6 +149,16 @@ test('logging out ends the session at the provider when SSO is the only way in',
     $this->assertGuest();
 });
 
+test('logging out keeps Fortify\'s JSON response for clients that want one', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->withSession([ThreeAgSingleSignOn::ID_TOKEN => 'the.id.token']);
+
+    $this->postJson(route('logout'))->assertNoContent();
+
+    $this->assertGuest();
+});
+
 test('logging out stays local while local sign in is still allowed', function () {
     $user = User::factory()->create();
 
