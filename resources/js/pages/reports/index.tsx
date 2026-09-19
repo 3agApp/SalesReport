@@ -16,7 +16,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { formatMoney, formatNumber, MIXED_CURRENCY } from '@/lib/format';
+import { formatMoney, formatNumber } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type {
@@ -37,7 +37,9 @@ type Props = {
     periods: ReportOption[];
     shops: ReportShopOption[];
     statusOptions: ReportOption[];
-    summary: ReportSummary;
+    /** Set instead of the figures when the range spans more than one currency. */
+    currencyConflict?: string[];
+    summary?: ReportSummary;
     series?: ReportSeriesPoint[];
     byShop?: ReportShopRow[];
     topProducts?: ReportProductRow[];
@@ -138,6 +140,7 @@ export default function ReportsIndex({
     periods,
     shops,
     statusOptions,
+    currencyConflict,
     summary,
     series,
     byShop,
@@ -150,6 +153,61 @@ export default function ReportsIndex({
 
     if (!currentOrganization) {
         return null;
+    }
+
+    const heading = (
+        <>
+            <div className="page-heading">
+                <p className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
+                    {currentOrganization.name}
+                </p>
+                <h1 className="page-title">Reports</h1>
+                <p className="text-muted-foreground text-sm">
+                    {filters.rangeLabel} · times shown in{' '}
+                    {filters.timezone.replace('_', ' ')}
+                </p>
+            </div>
+
+            <ReportFilterBar
+                organizationSlug={currentOrganization.slug}
+                filters={filters}
+                periods={periods}
+                shops={shops}
+                statusOptions={statusOptions}
+            />
+        </>
+    );
+
+    // Adding two currencies together needs a rate, and any rate we picked
+    // would produce a figure that reconciles against neither set of books.
+    // So the report stops here and says what to change.
+    if (currencyConflict || !summary) {
+        return (
+            <>
+                <Head title="Reports" />
+                <div className="workspace-page">
+                    {heading}
+                    <div className="workspace-panel flex items-start gap-3 border-amber-600/30 px-6 py-5 text-sm dark:border-amber-400/30">
+                        <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400" />
+                        <div className="space-y-1">
+                            <p className="text-foreground font-medium">
+                                These shops sold in{' '}
+                                {currencyConflict?.join(' and ') ??
+                                    'more than one currency'}
+                                .
+                            </p>
+                            <p className="text-muted-foreground">
+                                There is no total to show. Adding two currencies
+                                together needs an exchange rate, and any figure
+                                that produced would reconcile against neither.
+                                Narrow the shop filter to shops sharing one
+                                currency.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </>
+        );
     }
 
     const money = (value: number) => formatMoney(value, summary.currency);
@@ -169,24 +227,7 @@ export default function ReportsIndex({
         <>
             <Head title="Reports" />
             <div className="workspace-page">
-                <div className="page-heading">
-                    <p className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
-                        {currentOrganization.name}
-                    </p>
-                    <h1 className="page-title">Reports</h1>
-                    <p className="text-muted-foreground text-sm">
-                        {filters.rangeLabel} · times shown in{' '}
-                        {filters.timezone.replace('_', ' ')}
-                    </p>
-                </div>
-
-                <ReportFilterBar
-                    organizationSlug={currentOrganization.slug}
-                    filters={filters}
-                    periods={periods}
-                    shops={shops}
-                    statusOptions={statusOptions}
-                />
+                {heading}
 
                 {comparison?.partial ? (
                     <div className="workspace-panel flex items-start gap-3 border-amber-600/30 px-6 py-4 text-sm dark:border-amber-400/30">
@@ -196,18 +237,6 @@ export default function ReportsIndex({
                             the orders imported so far, so the changes below may
                             reflect when the sync started rather than how the
                             shops traded.
-                        </p>
-                    </div>
-                ) : null}
-
-                {summary.currency === MIXED_CURRENCY ? (
-                    <div className="workspace-panel flex items-start gap-3 border-amber-600/30 px-6 py-4 text-sm dark:border-amber-400/30">
-                        <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400" />
-                        <p className="text-muted-foreground">
-                            These shops sell in more than one currency, so the
-                            totals below are unconverted sums. Filter to one
-                            shop, or to shops sharing a currency, for a figure
-                            you can book.
                         </p>
                     </div>
                 ) : null}

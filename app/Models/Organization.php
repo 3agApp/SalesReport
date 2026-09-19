@@ -202,6 +202,25 @@ class Organization extends Model
     }
 
     /**
+     * Get the currencies the organization's shops sell in.
+     *
+     * One is the only workable answer. Totals in two currencies cannot be
+     * added together, so a second one has to be visible on the shops page
+     * rather than discovered halfway down a report.
+     *
+     * @return array<int, string>
+     */
+    public function shopCurrencies(): array
+    {
+        return $this->shops()
+            ->whereNotNull('currency')
+            ->distinct()
+            ->orderBy('currency')
+            ->pluck('currency')
+            ->all();
+    }
+
+    /**
      * Get all invitations for this organization.
      *
      * @return HasMany<OrganizationInvitation, $this>

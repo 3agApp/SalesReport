@@ -96,7 +96,11 @@ test('a failing check records why the shop could not be read', function (callabl
 
 test('credentials are retried in the query string when the host strips the authorization header', function () {
     Http::fake([
-        'toysonline.test/*' => Http::sequence()
+        'toysonline.test/*woocommerce_currency*' => Http::response(['value' => 'CHF']),
+        // Scoped to the order probe rather than left as a catch-all: Laravel
+        // invokes every stub and takes the first answer, so a catch-all
+        // sequence would be drained by the currency request as well.
+        'toysonline.test/wp-json/wc/v3/orders*' => Http::sequence()
             ->push(['message' => 'Consumer key is missing.'], 401)
             ->push([['id' => 1]], 200),
     ]);
@@ -110,7 +114,7 @@ test('credentials are retried in the query string when the host strips the autho
 
     expect($shop->refresh()->connection_status)->toBe(ShopConnectionStatus::Connected);
 
-    Http::assertSentCount(2);
+    Http::assertSentCount(3);
     Http::assertSent(fn (Request $request) => str_contains($request->url(), 'consumer_key='.$shop->consumer_key)
         && str_contains($request->url(), 'consumer_secret='.$shop->consumer_secret));
 });
@@ -273,4 +277,66 @@ test('a failed job records the failure rather than leaving a stale status', func
 
     expect($shop->refresh()->connection_status)->toBe(ShopConnectionStatus::Failed)
         ->and($shop->connection_message)->toContain('Worker died.');
+});
+
+test('a healthy check reads the currency the shop sells in', function () {
+    Http::fake([
+        'toysonline.test/*woocommerce_currency*' => Http::response(['id' => 'woocommerce_currency', 'value' => 'CHF']),
+        'toysonline.test/*' => Http::response([['id' => 1]]),
+    ]);
+
+    $user = User::factory()->create();
+    $shop = shopFor($user->currentOrganization);
+
+    $this->actingAs($user)->post(route('shops.connection.test', [$user->currentOrganization, $shop]));
+
+    expect($shop->refresh()->currency)->toBe('CHF');
+});
+
+test('a shop whose currency is already known is not asked again', function () {
+    Http::fake(['toysonline.test/*' => Http::response([['id' => 1]])]);
+
+    $user = User::factory()->create();
+    $shop = shopFor($user->currentOrganization, ['currency' => 'CHF']);
+
+    $this->actingAs($user)->post(route('shops.connection.test', [$user->currentOrganization, $shop]));
+
+    // An hourly check should not pay for a second request to hear the same
+    // answer a store gives about once in its life.
+    Http::assertSentCount(1);
+    expect($shop->refresh()->currency)->toBe('CHF');
+});
+
+test('a failed check keeps the currency it already knew', function () {
+    Http::fake(['toysonline.test/*' => Http::response(['message' => 'Invalid signature.'], 401)]);
+
+    $user = User::factory()->create();
+    $shop = shopFor($user->currentOrganization, ['currency' => 'CHF']);
+
+    $this->actingAs($user)->post(route('shops.connection.test', [$user->currentOrganization, $shop]));
+
+    $shop->refresh();
+
+    expect($shop->connection_status)->toBe(ShopConnectionStatus::InvalidCredentials)
+        ->and($shop->currency)->toBe('CHF');
+});
+
+test('changing the credentials forgets the currency too', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $shop = shopFor($user->currentOrganization, ['currency' => 'CHF']);
+
+    $this
+        ->actingAs($user)
+        ->patch(route('shops.update', [$user->currentOrganization, $shop]), [
+            'name' => $shop->name,
+            'url' => $shop->url,
+            'platform' => $shop->platform->value,
+            'consumer_key' => 'ck_'.str_repeat('c', 40),
+            'consumer_secret' => 'cs_'.str_repeat('d', 40),
+        ]);
+
+    // New credentials can point at a different store than the old ones did.
+    expect($shop->refresh()->currency)->toBeNull();
 });

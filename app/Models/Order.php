@@ -29,6 +29,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $discount_total
  * @property string $discount_tax
  * @property string $refunded_total
+ * @property string $refunded_tax
  * @property int|null $customer_woo_id
  * @property string|null $customer_email
  * @property string|null $customer_name
@@ -46,7 +47,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable([
     'woo_id', 'number', 'status', 'currency',
     'total', 'total_tax', 'shipping_total', 'shipping_tax', 'cart_tax',
-    'discount_total', 'discount_tax', 'refunded_total',
+    'discount_total', 'discount_tax', 'refunded_total', 'refunded_tax',
     'customer_woo_id', 'customer_email', 'customer_name', 'billing_country',
     'payment_method_title', 'placed_at', 'paid_at', 'completed_at', 'woo_updated_at',
 ])]
@@ -146,6 +147,7 @@ class Order extends Model
             'discount_total' => 'decimal:4',
             'discount_tax' => 'decimal:4',
             'refunded_total' => 'decimal:4',
+            'refunded_tax' => 'decimal:4',
             'placed_at' => 'datetime',
             'paid_at' => 'datetime',
             'completed_at' => 'datetime',

@@ -29,7 +29,7 @@ class ReportExportController extends Controller
 
         return $this->stream($this->filename($currentOrganization, 'orders', $filters->rangeLabel()), [
             'Shop', 'Order', 'Status', 'Placed at', 'Currency',
-            'Total', 'Tax', 'Shipping', 'Discount', 'Refunded', 'Net',
+            'Total', 'Tax', 'Shipping', 'Discount', 'Refunded', 'Refunded tax', 'Net', 'Net tax',
             'Customer', 'Email', 'Country', 'Payment method',
         ], function () use ($report, $shopNames, $filters) {
             foreach ($report->ordersForExport()->lazyById(500) as $order) {
@@ -45,7 +45,9 @@ class ReportExportController extends Controller
                     $order->shipping_total,
                     $order->discount_total,
                     $order->refunded_total,
+                    $order->refunded_tax,
                     number_format((float) $order->total - (float) $order->refunded_total, 4, '.', ''),
+                    number_format((float) $order->total_tax - (float) $order->refunded_tax, 4, '.', ''),
                     $order->customer_name,
                     $order->customer_email,
                     $order->billing_country,

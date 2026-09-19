@@ -407,3 +407,175 @@ test('a shop belonging to another organization cannot be synced', function () {
 
     Queue::assertNothingPushed();
 });
+
+test('the tax inside a refund is imported alongside the refunded amount', function () {
+    Http::fake(['toysonline.test/*' => Http::response([wooOrder(1, [
+        'total' => '248.60',
+        'total_tax' => '18.63',
+        // WooCommerce reports each refund as a negative, tax included.
+        'refunds' => [
+            ['id' => 900, 'reason' => '', 'total' => '-149.90', 'total_tax' => '-11.23'],
+        ],
+    ])])]);
+
+    app(ImportShopOrders::class)->handle(syncableShop());
+
+    $order = Order::sole();
+
+    expect((float) $order->refunded_total)->toBe(149.90)
+        ->and((float) $order->refunded_tax)->toBe(11.23);
+});
+
+test('an order with no refunds carries no refunded tax', function () {
+    Http::fake(['toysonline.test/*' => Http::response([wooOrder(1)])]);
+
+    app(ImportShopOrders::class)->handle(syncableShop());
+
+    expect((float) Order::sole()->refunded_tax)->toBe(0.0);
+});
+
+/**
+ * WooCommerce normalises both tax setups into the same shape before the REST
+ * API ever sees them: a line item's `total` always excludes tax, and the
+ * order's `total` always includes it, whether the shop enters prices with tax
+ * in them or without. 3AG B2B enters them without and every other shop here
+ * enters them with, and their orders arrive identical in structure.
+ *
+ * This pins that, because it is the reason nothing in the importer converts
+ * anything — and the day it stops being true, the totals would quietly drift.
+ */
+test('orders arrive the same shape whether a shop prices with or without tax', function () {
+    Http::fake(['toysonline.test/*' => Http::response([
+        // Priced excluding tax: 1,935.15 of goods, 9.50 shipping, 157.46 tax.
+        wooOrder(1, [
+            'total' => '2102.11',
+            'total_tax' => '157.46',
+            'shipping_total' => '9.50',
+            'shipping_tax' => '0.77',
+            'cart_tax' => '156.69',
+            'line_items' => [[
+                'id' => 10, 'name' => 'Pallet', 'sku' => 'PAL-1', 'product_id' => 1,
+                'variation_id' => 0, 'quantity' => 1,
+                'subtotal' => '1935.15', 'subtotal_tax' => '156.69',
+                'total' => '1935.15', 'total_tax' => '156.69',
+            ]],
+        ]),
+    ])]);
+
+    app(ImportShopOrders::class)->handle(syncableShop());
+
+    $order = Order::with('items')->sole();
+    $item = $order->items->sole();
+
+    // The order total is what the customer paid, tax included...
+    expect((float) $order->total)->toBe(2102.11)
+        ->and((float) $order->total_tax)->toBe(157.46)
+        // ...and it is the line items plus shipping plus that tax.
+        ->and((float) $item->total + (float) $order->shipping_total + (float) $order->total_tax)
+        ->toBe(2102.11)
+        // The line item's own total excludes tax, which is carried separately.
+        ->and((float) $item->total)->toBe(1935.15)
+        ->and((float) $item->total_tax)->toBe(156.69)
+        // Which is the same as saying: cart tax plus shipping tax.
+        ->and((float) $order->cart_tax + (float) $order->shipping_tax)->toBe(157.46);
+});
+
+/**
+ * Every column the importer writes has to be listed twice: once on the row it
+ * builds and once among the columns the upsert is allowed to refresh. Miss the
+ * second and new orders look right while every order already in the table
+ * keeps its old value forever, which is invisible until someone reconciles.
+ */
+test('every column the importer writes is refreshed on a re-import', function () {
+    Http::fake([
+        'toysonline.test/*' => Http::sequence()
+            ->push([wooOrder(1)])
+            ->push([wooOrder(1, [
+                'status' => 'refunded',
+                'number' => '1-A',
+                'total' => '250.00',
+                'total_tax' => '18.75',
+                'shipping_total' => '12.00',
+                'shipping_tax' => '0.90',
+                'cart_tax' => '17.85',
+                'discount_total' => '5.00',
+                'discount_tax' => '0.35',
+                'customer_id' => 99,
+                'billing' => ['first_name' => 'Ben', 'last_name' => 'Roth', 'email' => 'ben@example.test', 'country' => 'DE'],
+                'payment_method_title' => 'Invoice',
+                'currency' => 'eur',
+                'refunds' => [['id' => 900, 'reason' => '', 'total' => '-250.00', 'total_tax' => '-18.75']],
+            ])]),
+    ]);
+
+    $shop = syncableShop();
+
+    app(ImportShopOrders::class)->handle($shop);
+    $shop->syncStateOrCreate()->update(['backfill_completed_at' => now(), 'last_synced_at' => now()]);
+    app(ImportShopOrders::class)->handle($shop->fresh());
+
+    $order = Order::sole();
+
+    expect($order->status)->toBe('refunded')
+        ->and($order->number)->toBe('1-A')
+        ->and($order->currency)->toBe('EUR')
+        ->and((float) $order->total)->toBe(250.0)
+        ->and((float) $order->total_tax)->toBe(18.75)
+        ->and((float) $order->shipping_total)->toBe(12.0)
+        ->and((float) $order->shipping_tax)->toBe(0.9)
+        ->and((float) $order->cart_tax)->toBe(17.85)
+        ->and((float) $order->discount_total)->toBe(5.0)
+        ->and((float) $order->discount_tax)->toBe(0.35)
+        ->and((float) $order->refunded_total)->toBe(250.0)
+        ->and((float) $order->refunded_tax)->toBe(18.75)
+        ->and($order->customer_woo_id)->toBe(99)
+        ->and($order->customer_email)->toBe('ben@example.test')
+        ->and($order->customer_name)->toBe('Ben Roth')
+        ->and($order->billing_country)->toBe('DE')
+        ->and($order->payment_method_title)->toBe('Invoice');
+});
+
+test('a full refund that records no tax still gives the tax back', function () {
+    // A refund made from Stripe's dashboard, or written by a plugin, often
+    // records the amount and leaves the tax at zero. Living Nature and
+    // Tigerbox both have real orders shaped exactly like this.
+    Http::fake(['toysonline.test/*' => Http::response([wooOrder(1, [
+        'total' => '44.30',
+        'total_tax' => '0.50',
+        'refunds' => [['id' => 900, 'reason' => 'Refunded in the Stripe dashboard', 'total' => '-44.30', 'total_tax' => '0.00']],
+    ])])]);
+
+    app(ImportShopOrders::class)->handle(syncableShop());
+
+    $order = Order::sole();
+
+    // Nothing was kept, so nothing is owed.
+    expect((float) $order->refunded_total)->toBe(44.30)
+        ->and((float) $order->refunded_tax)->toBe(0.50);
+});
+
+test('a partial refund that records no tax is left exactly as reported', function () {
+    Http::fake(['toysonline.test/*' => Http::response([wooOrder(1, [
+        'total' => '100.00',
+        'total_tax' => '7.70',
+        'refunds' => [['id' => 900, 'reason' => '', 'total' => '-30.00', 'total_tax' => '0.00']],
+    ])])]);
+
+    app(ImportShopOrders::class)->handle(syncableShop());
+
+    // There is nothing to work the split out from, and inventing one would
+    // put a number in the books that nobody can trace back to a refund.
+    expect((float) Order::sole()->refunded_tax)->toBe(0.0);
+});
+
+test('a refund that reports its own tax is taken at its word', function () {
+    Http::fake(['toysonline.test/*' => Http::response([wooOrder(1, [
+        'total' => '248.60',
+        'total_tax' => '18.63',
+        'refunds' => [['id' => 900, 'reason' => '', 'total' => '-248.60', 'total_tax' => '-18.63']],
+    ])])]);
+
+    app(ImportShopOrders::class)->handle(syncableShop());
+
+    expect((float) Order::sole()->refunded_tax)->toBe(18.63);
+});

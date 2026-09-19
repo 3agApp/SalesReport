@@ -24,6 +24,7 @@ use Illuminate\Support\Str;
  * @property string $name
  * @property string $url
  * @property ShopPlatform $platform
+ * @property string|null $currency
  * @property string $consumer_key
  * @property string $consumer_secret
  * @property ShopConnectionStatus $connection_status
@@ -132,12 +133,20 @@ class Shop extends Model
      */
     public function recordConnectionResult(ShopConnectionResult $result): void
     {
-        static::withoutTimestamps(fn () => $this->forceFill([
+        $attributes = [
             'connection_status' => $result->status,
             'connection_message' => $result->message,
             'connection_checked_at' => now(),
             'connection_response_time_ms' => $result->responseTimeMs,
-        ])->save());
+        ];
+
+        // Set only when the check actually read it, so a shop that has gone
+        // unreachable keeps the currency we already knew it sells in.
+        if ($result->currency !== null) {
+            $attributes['currency'] = $result->currency;
+        }
+
+        static::withoutTimestamps(fn () => $this->forceFill($attributes)->save());
     }
 
     /**
@@ -153,6 +162,9 @@ class Shop extends Model
             'connection_message' => null,
             'connection_checked_at' => null,
             'connection_response_time_ms' => null,
+            // Re-read along with everything else: new credentials can point
+            // at a different store than the old ones did.
+            'currency' => null,
         ]);
     }
 

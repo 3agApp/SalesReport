@@ -242,3 +242,61 @@ test('a status no shop of the organization uses falls back to the default', func
             ->where('summary.orderCount', 1)
         );
 });
+
+test('a range spanning two currencies shows no figures at all', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+
+    $swiss = Shop::factory()->for($organization)->create(['currency' => 'CHF']);
+    $german = Shop::factory()->for($organization)->create(['currency' => 'EUR']);
+
+    Order::factory()->for($swiss)->create(['status' => 'completed', 'currency' => 'CHF', 'total' => 100, 'refunded_total' => 0, 'placed_at' => now()]);
+    Order::factory()->for($german)->create(['status' => 'completed', 'currency' => 'EUR', 'total' => 100, 'refunded_total' => 0, 'placed_at' => now()]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', $organization))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('currencyConflict', ['CHF', 'EUR'])
+            // No total is offered, because adding the two together would need
+            // a rate and would reconcile against neither set of books.
+            ->missing('summary')
+            ->has('filters')
+        );
+});
+
+test('narrowing to shops sharing a currency brings the figures back', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+
+    $swiss = Shop::factory()->for($organization)->create(['currency' => 'CHF']);
+    $german = Shop::factory()->for($organization)->create(['currency' => 'EUR']);
+
+    Order::factory()->for($swiss)->create(['status' => 'completed', 'currency' => 'CHF', 'total' => 100, 'refunded_total' => 0, 'placed_at' => now()]);
+    Order::factory()->for($german)->create(['status' => 'completed', 'currency' => 'EUR', 'total' => 999, 'refunded_total' => 0, 'placed_at' => now()]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.index', [$organization, 'shops' => [$swiss->id]]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->missing('currencyConflict')
+            ->where('summary.currency', 'CHF')
+            ->where('summary.netRevenue', 100)
+        );
+});
+
+test('the shops page says when its shops disagree on currency', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+
+    Shop::factory()->for($organization)->create(['currency' => 'CHF']);
+    Shop::factory()->for($organization)->create(['currency' => 'EUR']);
+
+    $this
+        ->actingAs($user)
+        ->get(route('shops.index', $organization))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('currencies', ['CHF', 'EUR']));
+});

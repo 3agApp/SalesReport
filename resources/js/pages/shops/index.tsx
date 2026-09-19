@@ -12,6 +12,7 @@ import {
     Search,
     Store,
     Trash2,
+    TriangleAlert,
     X,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -56,6 +57,8 @@ type Props = {
     shops: Paginated<Shop>;
     filters: ShopFilters;
     platforms: ShopPlatformOption[];
+    /** The currencies these shops sell in; more than one is a problem. */
+    currencies: string[];
     permissions: OrganizationPermissions;
 };
 
@@ -63,6 +66,7 @@ export default function ShopsIndex({
     shops,
     filters,
     platforms,
+    currencies,
     permissions,
 }: Props) {
     const { currentOrganization } = usePage().props;
@@ -173,6 +177,24 @@ export default function ShopsIndex({
                         </Button>
                     ) : null}
                 </div>
+
+                {currencies.length > 1 ? (
+                    <div className="workspace-panel flex items-start gap-3 border-amber-600/30 px-6 py-4 text-sm dark:border-amber-400/30">
+                        <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400" />
+                        <div className="space-y-1">
+                            <p className="text-foreground font-medium">
+                                These shops sell in {currencies.join(' and ')}.
+                            </p>
+                            <p className="text-muted-foreground">
+                                A report cannot total them together, so it will
+                                refuse to until the selection is narrowed to one
+                                currency. Keep an organization to shops sharing
+                                a currency, or split them into separate
+                                organizations.
+                            </p>
+                        </div>
+                    </div>
+                ) : null}
 
                 <div className="workspace-table">
                     <div className="flex flex-col gap-2 border-b p-4 sm:flex-row sm:items-center">
