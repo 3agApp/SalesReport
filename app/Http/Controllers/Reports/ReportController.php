@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Reports;
 use App\Enums\ReportPeriod;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Reports\ReportFilterRequest;
-use App\Models\Order;
 use App\Models\Organization;
 use App\Models\Shop;
 use App\Services\Reports\SalesComparison;
@@ -34,10 +33,12 @@ class ReportController extends Controller
                 ->get()
                 ->map(fn (Shop $shop) => ['id' => $shop->id, 'name' => $shop->name])
                 ->values(),
-            'statusOptions' => collect(Order::OPEN_STATUSES + ['cancelled', 'failed'])
-                ->map(fn (string $status) => [
+            // What the shops themselves say they have, not a list we guessed
+            // at, so a status a store invented can still be counted.
+            'statusOptions' => collect($currentOrganization->orderStatuses())
+                ->map(fn (string $label, string $status) => [
                     'value' => $status,
-                    'label' => ucfirst(str_replace('-', ' ', $status)),
+                    'label' => $label,
                 ])
                 ->values(),
             'summary' => $report->summary(),

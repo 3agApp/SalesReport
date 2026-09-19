@@ -303,7 +303,11 @@ export default function ReportsIndex({
                             description="Including the statuses this report is not counting"
                         />
                         <Deferred data="byStatus" fallback={<LoadingRows />}>
-                            <StatusTable rows={byStatus ?? []} money={money} />
+                            <StatusTable
+                                rows={byStatus ?? []}
+                                statusOptions={statusOptions}
+                                money={money}
+                            />
                         </Deferred>
                     </div>
                 </div>
@@ -415,11 +419,26 @@ function ShopTable({
     );
 }
 
+/**
+ * Name a status the way the filter does.
+ *
+ * A store's own status has whatever name the store gave it, so the two lists
+ * have to agree or the same status reads as two different things.
+ */
+function statusLabel(status: string, options: ReportOption[]): string {
+    return (
+        options.find((option) => option.value === status)?.label ??
+        status.replace(/-/g, ' ').replace(/^./, (first) => first.toUpperCase())
+    );
+}
+
 function StatusTable({
     rows,
+    statusOptions,
     money,
 }: {
     rows: ReportStatusRow[];
+    statusOptions: ReportOption[];
     money: (value: number) => string;
 }) {
     if (rows.length === 0) {
@@ -442,7 +461,7 @@ function StatusTable({
                     <TableRow key={row.status}>
                         <TableCell className="pl-6">
                             <span className="inline-flex items-center gap-2">
-                                {row.label}
+                                {statusLabel(row.status, statusOptions)}
                                 {row.counted ? null : (
                                     <Badge
                                         variant="outline"

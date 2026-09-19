@@ -147,3 +147,39 @@ test('picking the same day twice reports on that one day', function () {
         ->assertQueryStringHas('to', $day->toDateString())
         ->assertNoJavaScriptErrors();
 });
+
+test('naming a status and counting it changes the report', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $shop = Shop::factory()->for($organization)->create(['name' => 'Toys Online']);
+
+    foreach (['completed', 'partial-complete'] as $status) {
+        Order::factory()->for($shop)->create([
+            'status' => $status,
+            'total' => 100,
+            'refunded_total' => 0,
+            'currency' => 'CHF',
+            'placed_at' => CarbonImmutable::now()->subDay(),
+        ]);
+    }
+
+    $this->actingAs($user);
+
+    $page = visit(route('reports.statuses.index', $organization));
+
+    // A slug the shop invented means nothing to a bookkeeper until they say
+    // what it is, and nothing is counted until they say it should be.
+    $page->assertSee('partial-complete')
+        ->assertSee('Not decided')
+        ->type('@status-label-partial-complete', 'Teilweise abgeschlossen')
+        ->click('@status-revenue-partial-complete')
+        ->click('@status-revenue-completed')
+        ->click('@save-order-statuses')
+        ->assertSee('Order statuses saved.')
+        ->assertNoJavaScriptErrors();
+
+    visit(route('reports.index', [$organization, 'period' => 'last_30_days']))
+        ->assertSee('Teilweise abgeschlossen')
+        ->assertSee('200.00')
+        ->assertNoJavaScriptErrors();
+});

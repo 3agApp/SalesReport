@@ -1,9 +1,10 @@
-import { router } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import {
     CalendarDays,
     Check,
     ChevronDown,
     Download,
+    SlidersHorizontal,
     Store,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -32,6 +33,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { index as reportsIndex } from '@/routes/reports';
+import { index as manageStatuses } from '@/routes/reports/statuses';
 import {
     items as exportItems,
     orders as exportOrders,
@@ -264,6 +266,11 @@ export default function ReportFilterBar({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-56">
                     <DropdownMenuLabel>Counted as revenue</DropdownMenuLabel>
+                    {statusOptions.length === 0 ? (
+                        <p className="text-muted-foreground px-2 py-1.5 text-xs">
+                            No orders imported yet.
+                        </p>
+                    ) : null}
                     {statusOptions.map((status) => (
                         <DropdownMenuCheckboxItem
                             key={status.value}
@@ -274,6 +281,15 @@ export default function ReportFilterBar({
                             {status.label}
                         </DropdownMenuCheckboxItem>
                     ))}
+                    <DropdownMenuSeparator />
+                    {/* Each shop names its own statuses, so what a slug like
+                        "partial-complete" means to the books is a question
+                        only the organization can answer. */}
+                    <DropdownMenuItem asChild>
+                        <Link href={manageStatuses(organizationSlug)}>
+                            <SlidersHorizontal /> Manage statuses
+                        </Link>
+                    </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
 

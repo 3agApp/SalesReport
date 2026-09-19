@@ -67,13 +67,28 @@ class Order extends Model
     public const array SETTLED_STATUSES = ['processing', 'completed'];
 
     /**
-     * The statuses that mean an order is still alive, settled or not.
+     * The statuses WooCommerce itself ships with.
      *
-     * Cancelled and failed orders are the ones left out.
+     * A floor for the status filter, never the whole of it: a store can
+     * register statuses of its own, and the shops this was built against do
+     * exactly that. Anything else a shop uses is discovered from the orders.
      *
      * @var array<string>
      */
-    public const array OPEN_STATUSES = ['processing', 'completed', 'on-hold', 'refunded', 'pending'];
+    public const array CORE_STATUSES = [
+        'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed',
+    ];
+
+    /**
+     * Turn a status slug into something a bookkeeper can read.
+     *
+     * A store's own status has no label we know of, so the slug is all there
+     * is to go on. Tidying it beats showing the raw value.
+     */
+    public static function statusLabel(string $status): string
+    {
+        return ucfirst(str_replace('-', ' ', $status));
+    }
 
     /**
      * Get the shop the order belongs to.

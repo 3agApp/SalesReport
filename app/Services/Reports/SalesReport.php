@@ -268,7 +268,6 @@ class SalesReport
             ->get()
             ->map(fn ($row) => [
                 'status' => (string) $row->status,
-                'label' => ucfirst(str_replace('-', ' ', (string) $row->status)),
                 'orderCount' => (int) $row->order_count,
                 'netRevenue' => round((float) $row->net, 2),
                 'counted' => in_array($row->status, $this->filters->statuses, true),
