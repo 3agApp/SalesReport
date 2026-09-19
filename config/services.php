@@ -45,6 +45,10 @@ return [
         'sync_timeout' => (int) env('WOOCOMMERCE_SYNC_TIMEOUT', 60),
         'sync_page_size' => (int) env('WOOCOMMERCE_SYNC_PAGE_SIZE', 100),
         'sync_max_pages_per_run' => (int) env('WOOCOMMERCE_SYNC_MAX_PAGES_PER_RUN', 50),
+        // A run stops on whichever comes first, this or the page cap.
+        // Page latency varies threefold between these shops, so a page
+        // count alone is a poor guess at how long a run will take.
+        'sync_max_seconds_per_run' => (int) env('WOOCOMMERCE_SYNC_MAX_SECONDS_PER_RUN', 300),
         'sync_overlap_minutes' => (int) env('WOOCOMMERCE_SYNC_OVERLAP_MINUTES', 10),
         'sync_after_minutes' => (int) env('WOOCOMMERCE_SYNC_AFTER_MINUTES', 15),
     ],

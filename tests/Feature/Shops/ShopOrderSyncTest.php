@@ -579,3 +579,78 @@ test('a refund that reports its own tax is taken at its word', function () {
 
     expect((float) Order::sole()->refunded_tax)->toBe(18.63);
 });
+
+test('a run stops when its time budget is spent and asks to be continued', function () {
+    config([
+        'services.woocommerce.sync_page_size' => 1,
+        'services.woocommerce.sync_max_pages_per_run' => 50,
+        // Spent before the run even starts.
+        'services.woocommerce.sync_max_seconds_per_run' => 0,
+    ]);
+
+    Http::fake([
+        'toysonline.test/*' => Http::sequence()
+            ->push([wooOrder(1, ['date_created_gmt' => '2026-01-10T09:00:00'])])
+            ->push([wooOrder(2, ['date_created_gmt' => '2026-01-11T09:00:00'])]),
+    ]);
+
+    $shop = syncableShop();
+
+    $result = app(ImportShopOrders::class)->handle($shop);
+
+    // One page regardless, or a run with no budget left would chain forever
+    // without ever importing anything.
+    expect($result->hasMore)->toBeTrue()
+        ->and($result->pagesFetched)->toBe(1)
+        ->and($shop->orders()->count())->toBe(1);
+
+    Http::assertSentCount(1);
+});
+
+test('an incremental run stops on its time budget too', function () {
+    config([
+        'services.woocommerce.sync_page_size' => 1,
+        'services.woocommerce.sync_max_pages_per_run' => 50,
+        'services.woocommerce.sync_max_seconds_per_run' => 0,
+    ]);
+
+    Http::fake([
+        'toysonline.test/*' => Http::sequence()
+            ->push([wooOrder(1, ['date_modified_gmt' => '2026-02-01T10:00:00'])])
+            ->push([wooOrder(2, ['date_modified_gmt' => '2026-02-01T11:00:00'])]),
+    ]);
+
+    $shop = syncableShop();
+    $shop->syncStateOrCreate()->update([
+        'backfill_completed_at' => now()->subDay(),
+        'last_synced_at' => now()->subHour(),
+    ]);
+
+    $result = app(ImportShopOrders::class)->handle($shop->fresh());
+
+    expect($result->hasMore)->toBeTrue()
+        ->and($result->pagesFetched)->toBe(1);
+
+    Http::assertSentCount(1);
+});
+
+test('a run within its budget still walks the whole history', function () {
+    config([
+        'services.woocommerce.sync_page_size' => 1,
+        'services.woocommerce.sync_max_pages_per_run' => 50,
+        'services.woocommerce.sync_max_seconds_per_run' => 300,
+    ]);
+
+    Http::fake([
+        'toysonline.test/*' => Http::sequence()
+            ->push([wooOrder(1, ['date_created_gmt' => '2026-01-10T09:00:00'])])
+            ->push([wooOrder(2, ['date_created_gmt' => '2026-01-11T09:00:00'])])
+            ->push([]),
+    ]);
+
+    $result = app(ImportShopOrders::class)->handle(syncableShop());
+
+    expect($result->hasMore)->toBeFalse()
+        ->and($result->status)->toBe(ShopSyncStatus::Synced)
+        ->and($result->importedCount)->toBe(2);
+});

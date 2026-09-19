@@ -68,8 +68,9 @@ class ImportShopOrders
         $cursor = $state->backfill_cursor;
         $imported = 0;
         $pages = 0;
+        $runStartedAt = microtime(true);
 
-        while ($pages < $this->maxPages()) {
+        while (true) {
             $query = [
                 'orderby' => 'date',
                 'order' => 'asc',
@@ -107,6 +108,10 @@ class ImportShopOrders
             if (count($payloads) < $this->pageSize()) {
                 return $this->completeBackfill($state, $imported, $pages);
             }
+
+            if ($this->runIsOver($pages, $runStartedAt)) {
+                break;
+            }
         }
 
         return new ShopSyncResult(
@@ -130,8 +135,9 @@ class ImportShopOrders
         $pages = 0;
         $caughtUp = false;
         $furthestModified = null;
+        $runStartedAt = microtime(true);
 
-        while ($pages < $this->maxPages()) {
+        while (true) {
             $payloads = $this->fetchPage($shop, [
                 'orderby' => 'modified',
                 'order' => 'asc',
@@ -154,6 +160,10 @@ class ImportShopOrders
             if (count($payloads) < $this->pageSize()) {
                 $caughtUp = true;
 
+                break;
+            }
+
+            if ($this->runIsOver($pages, $runStartedAt)) {
                 break;
             }
         }
@@ -291,6 +301,26 @@ class ImportShopOrders
     private function maxPages(): int
     {
         return (int) config('services.woocommerce.sync_max_pages_per_run');
+    }
+
+    /**
+     * Decide whether this run has done enough and should hand over.
+     *
+     * A long history is walked across several runs so that no single job
+     * holds a worker for an hour, and so that the run ends on its own terms
+     * rather than being killed mid-page by the queue's timeout. The check
+     * comes after a page rather than before one, so a run always makes
+     * progress even if the budget is set absurdly low.
+     */
+    private function runIsOver(int $pages, float $runStartedAt): bool
+    {
+        return $pages >= $this->maxPages()
+            || (microtime(true) - $runStartedAt) >= $this->maxSeconds();
+    }
+
+    private function maxSeconds(): int
+    {
+        return (int) config('services.woocommerce.sync_max_seconds_per_run');
     }
 
     private function overlapMinutes(): int
