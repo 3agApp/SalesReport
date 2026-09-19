@@ -100,10 +100,7 @@ export default function Welcome() {
                         ) : (
                             <>
                                 <Button variant="ghost" asChild>
-                                    <a
-                                        href={login.url()}
-                                        data-test="sso-login"
-                                    >
+                                    <a href={login.url()} data-test="sso-login">
                                         Log in
                                     </a>
                                 </Button>
@@ -142,10 +139,7 @@ export default function Welcome() {
                                         <ArrowRight />
                                     </Link>
                                 ) : (
-                                    <a
-                                        href={login.url()}
-                                        data-test="sso-start"
-                                    >
+                                    <a href={login.url()} data-test="sso-start">
                                         Start for free
                                         <ArrowRight />
                                     </a>

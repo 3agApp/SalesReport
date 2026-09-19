@@ -14,7 +14,7 @@ type PageProps = {
     accountsUrl: string;
 };
 
-export default function Profile({ status }: { status?: string }) {
+export default function Profile() {
     const { auth, accountsUrl } = usePage<PageProps>().props;
 
     return (

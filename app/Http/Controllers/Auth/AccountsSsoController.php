@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\AbstractProvider;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse;
 use Throwable;
 
@@ -25,9 +27,13 @@ class AccountsSsoController extends Controller
      */
     public function redirect(): SymfonyRedirectResponse
     {
-        return Socialite::driver('oidc_accounts')
-            ->with(['prompt' => 'consent'])
-            ->redirect();
+        $provider = Socialite::driver('oidc_accounts');
+
+        if (! $provider instanceof AbstractProvider) {
+            throw new RuntimeException('The oidc_accounts driver must be an OAuth 2 provider.');
+        }
+
+        return $provider->with(['prompt' => 'consent'])->redirect();
     }
 
     /**

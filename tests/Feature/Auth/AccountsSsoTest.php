@@ -3,7 +3,9 @@
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\AbstractProvider;
 use Laravel\Socialite\Two\User as SocialiteUser;
+use Mockery;
 
 test('guests visiting login are sent to the accounts sso redirect', function () {
     $this->get(route('login'))
@@ -24,14 +26,16 @@ test('login with an invitation stores it for after sso', function () {
 test('the accounts sso button redirects guests to the identity provider', function () {
     $redirect = redirect()->away('http://127.0.0.1:8000/oauth/authorize?prompt=consent');
 
-    Socialite::shouldReceive('driver')
-        ->with('oidc_accounts')
-        ->andReturnSelf();
-    Socialite::shouldReceive('with')
+    $provider = Mockery::mock(AbstractProvider::class);
+    $provider->shouldReceive('with')
         ->once()
         ->with(['prompt' => 'consent'])
         ->andReturnSelf();
-    Socialite::shouldReceive('redirect')->andReturn($redirect);
+    $provider->shouldReceive('redirect')->andReturn($redirect);
+
+    Socialite::shouldReceive('driver')
+        ->with('oidc_accounts')
+        ->andReturn($provider);
 
     $this->get(route('auth.accounts.redirect'))
         ->assertRedirect('http://127.0.0.1:8000/oauth/authorize?prompt=consent');
