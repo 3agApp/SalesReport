@@ -5,6 +5,7 @@ use App\Models\Organization;
 use App\Models\OrganizationInvitation;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
+use Laravel\Socialite\Facades\Socialite;
 
 test('guests cannot visit onboarding', function () {
     $this->get(route('onboarding'))->assertRedirect(route('login'));
@@ -72,13 +73,25 @@ test('creating a first organization makes it the current organization', function
         ->and($user->fresh()->ownsOrganization($organization))->toBeTrue();
 });
 
-test('users without an organization are sent to onboarding after logging in', function () {
-    $user = User::factory()->withoutOrganization()->create();
+test('users without an organization are sent to onboarding after signing in via sso', function () {
+    $user = User::factory()->withoutOrganization()->create([
+        'email' => 'newcomer@3ag.local',
+        'sso_id' => null,
+    ]);
 
-    $this->post(route('login.store'), [
-        'email' => $user->email,
-        'password' => 'password',
-    ])->assertRedirect(route('onboarding'));
+    $socialiteUser = (new Laravel\Socialite\Two\User)->map([
+        'id' => 'oidc-onboarding',
+        'name' => $user->name,
+        'email' => 'newcomer@3ag.local',
+    ]);
+
+    Socialite::shouldReceive('driver')
+        ->with('oidc_accounts')
+        ->andReturnSelf();
+    Socialite::shouldReceive('user')->andReturn($socialiteUser);
+
+    $this->get(route('auth.accounts.callback'))
+        ->assertRedirect(route('onboarding'));
 });
 
 test('declining the last invitation without an organization returns to onboarding', function () {

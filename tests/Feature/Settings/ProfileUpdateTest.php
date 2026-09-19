@@ -61,7 +61,7 @@ test('user can delete their account', function () {
     $response = $this
         ->actingAs($user)
         ->delete(route('profile.destroy'), [
-            'password' => 'password',
+            'confirmation' => 'DELETE',
         ]);
 
     $response
@@ -72,18 +72,18 @@ test('user can delete their account', function () {
     expect($user->fresh())->toBeNull();
 });
 
-test('correct password must be provided to delete account', function () {
+test('delete confirmation must be provided to delete account', function () {
     $user = User::factory()->create();
 
     $response = $this
         ->actingAs($user)
         ->from(route('profile.edit'))
         ->delete(route('profile.destroy'), [
-            'password' => 'wrong-password',
+            'confirmation' => 'nope',
         ]);
 
     $response
-        ->assertSessionHasErrors('password')
+        ->assertSessionHasErrors('confirmation')
         ->assertRedirect(route('profile.edit'));
 
     expect($user->fresh())->not->toBeNull();
@@ -107,7 +107,7 @@ test('deleting an account hands its organizations to the longest standing admin'
 
     $this
         ->actingAs($owner)
-        ->delete(route('profile.destroy'), ['password' => 'password'])
+        ->delete(route('profile.destroy'), ['confirmation' => 'DELETE'])
         ->assertRedirect('/');
 
     expect($organization->fresh()->owner()?->id)->toBe($oldestAdmin->id)
@@ -128,7 +128,7 @@ test('deleting an account falls back to the longest standing member', function (
 
     $this
         ->actingAs($owner)
-        ->delete(route('profile.destroy'), ['password' => 'password'])
+        ->delete(route('profile.destroy'), ['confirmation' => 'DELETE'])
         ->assertRedirect('/');
 
     expect($organization->fresh()->owner()?->id)->toBe($first->id);
@@ -144,7 +144,7 @@ test('deleting an account winds up an organization nobody else is in', function 
 
     $this
         ->actingAs($owner)
-        ->delete(route('profile.destroy'), ['password' => 'password'])
+        ->delete(route('profile.destroy'), ['confirmation' => 'DELETE'])
         ->assertRedirect('/');
 
     expect(Organization::withTrashed()->find($organization->id)->trashed())->toBeTrue()
@@ -165,7 +165,7 @@ test('deleting an account leaves organizations it only belonged to alone', funct
 
     $this
         ->actingAs($member)
-        ->delete(route('profile.destroy'), ['password' => 'password'])
+        ->delete(route('profile.destroy'), ['confirmation' => 'DELETE'])
         ->assertRedirect('/');
 
     expect($organization->fresh()->owner()?->id)->toBe($owner->id)
