@@ -1,10 +1,13 @@
 <?php
 
+use App\Data\ReportFilters;
 use App\Enums\OrganizationRole;
+use App\Enums\ReportPeriod;
 use App\Models\Order;
 use App\Models\Organization;
 use App\Models\Shop;
 use App\Models\User;
+use App\Services\Reports\SalesReport;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -321,4 +324,52 @@ test('the report page does not scan the orders table once per panel', function (
         ->count();
 
     expect($scans)->toBe(1);
+});
+
+test('the chart and the per shop trends are read off one walk of the orders', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $shopA = Shop::factory()->for($organization)->create(['name' => 'A']);
+    $shopB = Shop::factory()->for($organization)->create(['name' => 'B']);
+
+    foreach ([$shopA, $shopB] as $shop) {
+        Order::factory()->count(3)->for($shop)->create([
+            'status' => 'completed',
+            'placed_at' => CarbonImmutable::parse('2026-03-10 12:00', 'UTC'),
+        ]);
+    }
+
+    $filters = new ReportFilters(
+        period: ReportPeriod::Custom,
+        from: CarbonImmutable::parse('2026-03-01', 'UTC'),
+        to: CarbonImmutable::parse('2026-03-31 23:59:59', 'UTC'),
+        timezone: 'UTC',
+        shopIds: [$shopA->id, $shopB->id],
+        statuses: ['completed'],
+    );
+
+    $report = new SalesReport($filters);
+
+    DB::connection()->enableQueryLog();
+    DB::connection()->flushQueryLog();
+
+    $series = $report->series();
+    $byShop = $report->byShop();
+
+    // The only figure costing a row of work per order, rather than per
+    // bucket, should be paid for once however many panels want it.
+    $walks = collect(DB::connection()->getQueryLog())
+        ->filter(fn (array $query) => str_contains($query['query'], '"shop_id", "placed_at", "total", "refunded_total"'))
+        ->count();
+
+    expect($walks)->toBe(1);
+
+    // And the two still agree: each shop's trend sums to its own net, and
+    // the shops together sum to the chart.
+    expect(collect($byShop)->sum('netRevenue'))
+        ->toEqualWithDelta(collect($series)->sum('revenue'), 0.01);
+
+    foreach ($byShop as $row) {
+        expect(round(array_sum($row['trend']), 2))->toEqualWithDelta($row['netRevenue'], 0.01);
+    }
 });

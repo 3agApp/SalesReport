@@ -40,6 +40,11 @@ class SalesReport
      */
     private ?array $buckets = null;
 
+    /**
+     * @var array{series: array<int, array<string, mixed>>, trends: array<int, array<int, float>>}|null
+     */
+    private ?array $overTime = null;
+
     public function __construct(private ReportFilters $filters) {}
 
     /**
@@ -104,49 +109,11 @@ class SalesReport
     /**
      * Get revenue, orders and average order value over time.
      *
-     * Buckets are built in PHP rather than in SQL because the boundaries have
-     * to land in the organization's timezone, daylight saving included, which
-     * no portable SQL expression gets right.
-     *
      * @return array<int, array<string, mixed>>
      */
     public function series(): array
     {
-        $interval = $this->filters->interval();
-        $buckets = $this->emptyBuckets();
-
-        $rows = $this->orders()
-            ->select(['placed_at', 'total', 'refunded_total'])
-            ->toBase()
-            ->cursor();
-
-        foreach ($rows as $row) {
-            if ($row->placed_at === null) {
-                continue;
-            }
-
-            $key = $interval
-                ->startOf(CarbonImmutable::parse($row->placed_at, 'UTC')->setTimezone($this->filters->timezone))
-                ->toDateString();
-
-            if (! isset($buckets[$key])) {
-                continue;
-            }
-
-            $buckets[$key]['orders']++;
-            $buckets[$key]['revenue'] += (float) $row->total - (float) $row->refunded_total;
-        }
-
-        return collect($buckets)
-            ->map(fn (array $bucket) => [
-                ...$bucket,
-                'revenue' => round($bucket['revenue'], 2),
-                'averageOrderValue' => $bucket['orders'] > 0
-                    ? round($bucket['revenue'] / $bucket['orders'], 2)
-                    : 0.0,
-            ])
-            ->values()
-            ->toArray();
+        return $this->overTime()['series'];
     }
 
     /**
@@ -163,7 +130,7 @@ class SalesReport
             ->whereIn('id', $this->filters->shopIds)
             ->pluck('name', 'id');
 
-        $trends = $this->revenueByShopOverTime();
+        $trends = $this->overTime()['trends'];
 
         return $this->orders()
             ->select('shop_id')
@@ -185,16 +152,28 @@ class SalesReport
     }
 
     /**
-     * Get each shop's revenue per bucket, on the same buckets as the series.
+     * Lay the filtered orders out over time, once.
      *
-     * @return array<int, array<int, float>>
+     * Buckets are built in PHP rather than in SQL because the boundaries have
+     * to land in the organization's timezone, daylight saving included, which
+     * no portable SQL expression gets right. That makes this the one figure on
+     * the page costing a row of work per order rather than per bucket, so the
+     * chart and the per-shop trends are read off a single walk. They always
+     * shared a query, a range and a set of buckets; the only difference was
+     * whether the total was also kept per shop.
+     *
+     * @return array{series: array<int, array<string, mixed>>, trends: array<int, array<int, float>>}
      */
-    private function revenueByShopOverTime(): array
+    private function overTime(): array
     {
+        if ($this->overTime !== null) {
+            return $this->overTime;
+        }
+
         $interval = $this->filters->interval();
         $buckets = $this->emptyBuckets();
-        $empty = array_fill(0, count($buckets), 0.0);
         $positions = array_flip(array_keys($buckets));
+        $empty = array_fill(0, count($buckets), 0.0);
         $trends = [];
 
         $rows = $this->orders()
@@ -211,19 +190,41 @@ class SalesReport
                 ->startOf(CarbonImmutable::parse($row->placed_at, 'UTC')->setTimezone($this->filters->timezone))
                 ->toDateString();
 
-            if (! isset($positions[$key])) {
+            // Guarded on the buckets rather than their positions: the two
+            // hold the same keys, and this is the one that proves the bucket
+            // being added to is really there.
+            if (! isset($buckets[$key])) {
                 continue;
             }
 
+            $net = (float) $row->total - (float) $row->refunded_total;
             $shopId = (int) $row->shop_id;
+
+            $buckets[$key]['orders']++;
+            $buckets[$key]['revenue'] += $net;
+
             $trends[$shopId] ??= $empty;
-            $trends[$shopId][$positions[$key]] += (float) $row->total - (float) $row->refunded_total;
+            $trends[$shopId][$positions[$key]] += $net;
         }
 
-        return array_map(
-            fn (array $values) => array_map(fn (float $value) => round($value, 2), $values),
-            $trends,
-        );
+        $series = collect($buckets)
+            ->map(fn (array $bucket) => [
+                ...$bucket,
+                'revenue' => round($bucket['revenue'], 2),
+                'averageOrderValue' => $bucket['orders'] > 0
+                    ? round($bucket['revenue'] / $bucket['orders'], 2)
+                    : 0.0,
+            ])
+            ->values()
+            ->toArray();
+
+        return $this->overTime = [
+            'series' => $series,
+            'trends' => array_map(
+                fn (array $values) => array_map(fn (float $value) => round($value, 2), $values),
+                $trends,
+            ),
+        ];
     }
 
     /**

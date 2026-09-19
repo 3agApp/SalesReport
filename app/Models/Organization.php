@@ -51,15 +51,14 @@ class Organization extends Model
     {
         parent::boot();
 
+        // Set once, and never again. The slug is the organization's address:
+        // every saved report link, every bookmark and every invitation that
+        // has already gone out is built on it, and following a rename would
+        // break all of them to keep a URL tidy. It is allowed to drift from
+        // the name instead.
         static::creating(function (Organization $organization) {
             if (empty($organization->slug)) {
                 $organization->slug = static::generateUniqueOrganizationSlug($organization->name);
-            }
-        });
-
-        static::updating(function (Organization $organization) {
-            if ($organization->isDirty('name')) {
-                $organization->slug = static::generateUniqueOrganizationSlug($organization->name, $organization->id);
             }
         });
     }
