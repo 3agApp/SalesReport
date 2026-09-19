@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Button } from '@/components/ui/button';
-import { dashboard, home, login, register } from '@/routes';
+import { dashboard, home, login } from '@/routes';
 
 const features = [
     {
@@ -103,7 +103,7 @@ export default function Welcome() {
                                     <Link href={login()}>Log in</Link>
                                 </Button>
                                 <Button asChild>
-                                    <Link href={register()}>Get started</Link>
+                                    <Link href={login()}>Get started</Link>
                                 </Button>
                             </>
                         )}
@@ -127,7 +127,7 @@ export default function Welcome() {
                         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                             <Button size="lg" asChild>
                                 <Link
-                                    href={auth.user ? dashboardUrl : register()}
+                                    href={auth.user ? dashboardUrl : login()}
                                 >
                                     {auth.user
                                         ? 'Open dashboard'
