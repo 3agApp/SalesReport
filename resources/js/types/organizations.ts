@@ -4,6 +4,8 @@ export type Organization = {
     id: number;
     name: string;
     slug: string;
+    /** Only sent on the settings page, where it can be changed. */
+    timezone?: string;
     role?: OrganizationRole;
     roleLabel?: string;
     isCurrent?: boolean;

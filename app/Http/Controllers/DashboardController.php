@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Order;
 use App\Models\Organization;
 use App\Models\Shop;
 use Illuminate\Http\Request;
@@ -21,6 +22,10 @@ class DashboardController extends Controller
             'stats' => [
                 'shops' => $currentOrganization->shops()->count(),
                 'members' => $currentOrganization->members()->count(),
+                'shopsNeedingAttention' => $currentOrganization->shops()->needingAttention()->count(),
+                'orders' => Order::query()
+                    ->whereIn('shop_id', $currentOrganization->shops()->select('id'))
+                    ->count(),
             ],
             'recentShops' => $currentOrganization->shops()
                 ->latest('updated_at')
@@ -34,6 +39,13 @@ class DashboardController extends Controller
                     'host' => $shop->host(),
                     'platformLabel' => $shop->platform->label(),
                     'updatedAtDiff' => $shop->updated_at?->diffForHumans(),
+                    'connection' => [
+                        'status' => $shop->connection_status->value,
+                        'statusLabel' => $shop->connection_status->label(),
+                        'tone' => $shop->connection_status->tone(),
+                        'message' => $shop->connection_message,
+                        'checkedAtDiff' => $shop->connection_checked_at?->diffForHumans(),
+                    ],
                 ]),
             'permissions' => $request->user()->toOrganizationPermissions($currentOrganization),
         ]);

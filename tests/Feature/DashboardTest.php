@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\OrganizationRole;
+use App\Enums\ShopConnectionStatus;
 use App\Models\Organization;
 use App\Models\OrganizationInvitation;
 use App\Models\Shop;
@@ -39,6 +40,29 @@ test('dashboard summarises the current organization', function () {
             ->where('stats.shops', 3)
             ->where('stats.members', 1)
             ->has('recentShops', 3)
+        );
+});
+
+test('dashboard counts the shops whose connection needs attention', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+
+    Shop::factory()->for($organization)->connected()->create();
+    Shop::factory()->for($organization)->create();
+    Shop::factory()->for($organization)->failing()->create();
+    Shop::factory()->for($organization)->failing(ShopConnectionStatus::Unreachable)->create();
+
+    // A shop belonging to another organization is never counted here.
+    Shop::factory()->failing()->create();
+
+    $this
+        ->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('stats.shops', 4)
+            ->where('stats.shopsNeedingAttention', 2)
+            ->where('recentShops.0.connection.status', ShopConnectionStatus::Unreachable->value)
         );
 });
 

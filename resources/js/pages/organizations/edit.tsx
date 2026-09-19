@@ -37,6 +37,7 @@ import type {
 
 type Props = {
     organization: Organization;
+    timezones: { value: string; label: string }[];
     members: OrganizationMember[];
     invitations: OrganizationInvitation[];
     permissions: OrganizationPermissions;
@@ -49,6 +50,7 @@ export default function OrganizationEdit({
     invitations,
     permissions,
     availableRoles,
+    timezones,
 }: Props) {
     const getInitials = useInitials();
 
@@ -121,6 +123,40 @@ export default function OrganizationEdit({
                                                 required
                                             />
                                             <InputError message={errors.name} />
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="timezone">
+                                                Reporting timezone
+                                            </Label>
+                                            <select
+                                                id="timezone"
+                                                name="timezone"
+                                                data-test="organization-timezone-input"
+                                                defaultValue={
+                                                    organization.timezone ??
+                                                    'UTC'
+                                                }
+                                                className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
+                                            >
+                                                {timezones.map((timezone) => (
+                                                    <option
+                                                        key={timezone.value}
+                                                        value={timezone.value}
+                                                    >
+                                                        {timezone.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <p className="text-muted-foreground text-xs">
+                                                Decides where a reporting day,
+                                                month or quarter begins and
+                                                ends. Orders themselves are
+                                                always stored in UTC.
+                                            </p>
+                                            <InputError
+                                                message={errors.timezone}
+                                            />
                                         </div>
 
                                         <div className="flex flex-wrap items-center gap-4">

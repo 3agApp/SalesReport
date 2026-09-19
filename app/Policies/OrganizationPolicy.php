@@ -25,6 +25,17 @@ class OrganizationPolicy
     }
 
     /**
+     * Determine whether the user can see the organization's sales reports.
+     *
+     * Every member can: reading the numbers is the point of being in an
+     * organization, and looking at them changes nothing.
+     */
+    public function viewReports(User $user, Organization $organization): bool
+    {
+        return $user->belongsToOrganization($organization);
+    }
+
+    /**
      * Determine whether the user can create models.
      */
     public function create(User $user): bool

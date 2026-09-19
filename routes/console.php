@@ -9,3 +9,15 @@ Schedule::call(function () {
         ->where('expires_at', '<', now())
         ->delete();
 })->daily()->description('Delete expired organization invitations');
+
+Schedule::command('shops:check-connections')
+    ->hourly()
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->description('Re-check WooCommerce shop connections');
+
+Schedule::command('shops:sync-orders')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->description('Sync WooCommerce orders');

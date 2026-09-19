@@ -34,6 +34,25 @@ class ShopPolicy
     }
 
     /**
+     * Determine whether the user can test the shop's connection.
+     *
+     * Testing writes a new status and calls out to the shop, so it takes the
+     * same permission as editing rather than merely viewing.
+     */
+    public function testConnection(User $user, Shop $shop): bool
+    {
+        return $user->hasOrganizationPermission($shop->organization, OrganizationPermission::UpdateShop);
+    }
+
+    /**
+     * Determine whether the user can sync the shop's orders.
+     */
+    public function syncOrders(User $user, Shop $shop): bool
+    {
+        return $user->hasOrganizationPermission($shop->organization, OrganizationPermission::UpdateShop);
+    }
+
+    /**
      * Determine whether the user can delete the shop.
      */
     public function delete(User $user, Shop $shop): bool
