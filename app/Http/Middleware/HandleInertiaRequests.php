@@ -50,7 +50,7 @@ class HandleInertiaRequests extends Middleware
             'pendingInvitationsCount' => fn () => $user
                 ? OrganizationInvitation::query()->pendingFor($user->email)->count()
                 : 0,
-            'accountsUrl' => rtrim((string) config('oidc.connections.accounts.base_url', 'http://127.0.0.1:8000'), '/'),
+            'accountsUrl' => rtrim((string) config('oidc.connections.accounts.base_url'), '/'),
         ];
     }
 }

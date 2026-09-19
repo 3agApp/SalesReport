@@ -74,7 +74,10 @@ return [
 
     'connections' => [
         'accounts' => [
-            'base_url' => env('ACCOUNTS_URL', 'http://127.0.0.1:8000'),
+            // No default: a fallback issuer sends an environment that forgot
+            // ACCOUNTS_URL to discovery on its own host, which fails as an
+            // unreadable 500 instead of naming the missing variable.
+            'base_url' => env('ACCOUNTS_URL'),
             'client_id' => env('ACCOUNTS_CLIENT_ID'),
             'client_secret' => env('ACCOUNTS_CLIENT_SECRET'),
             'redirect' => env('ACCOUNTS_REDIRECT_URI', env('APP_URL').'/auth/accounts/callback'),

@@ -9,6 +9,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Inertia\Inertia;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\AbstractProvider;
 use RuntimeException;
@@ -24,16 +25,27 @@ class AccountsSsoController extends Controller
      *
      * prompt=consent forces Accounts to show the continue-as / switch-account
      * screen even when the browser already has an Accounts session.
+     *
+     * Building the provider reaches out to the issuer for its discovery
+     * document, so an unreachable or misconfigured Accounts takes the whole
+     * login route down with it. Report it and send the guest back to the
+     * homepage with a message, as the callback already does.
      */
     public function redirect(): SymfonyRedirectResponse
     {
-        $provider = Socialite::driver('oidc_accounts');
+        try {
+            $provider = Socialite::driver('oidc_accounts');
 
-        if (! $provider instanceof AbstractProvider) {
-            throw new RuntimeException('The oidc_accounts driver must be an OAuth 2 provider.');
+            if (! $provider instanceof AbstractProvider) {
+                throw new RuntimeException('The oidc_accounts driver must be an OAuth 2 provider.');
+            }
+
+            return $provider->with(['prompt' => 'consent'])->redirect();
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return $this->failed(__('Could not sign in with 3AG Accounts. Please try again.'));
         }
-
-        return $provider->with(['prompt' => 'consent'])->redirect();
     }
 
     /**
@@ -46,15 +58,13 @@ class AccountsSsoController extends Controller
         } catch (Throwable $exception) {
             report($exception);
 
-            return redirect('/')
-                ->with('status', __('Could not sign in with 3AG Accounts. Please try again.'));
+            return $this->failed(__('Could not sign in with 3AG Accounts. Please try again.'));
         }
 
         $email = $oidcUser->getEmail();
 
         if (! filled($email)) {
-            return redirect('/')
-                ->with('status', __('3AG Accounts did not return an email address.'));
+            return $this->failed(__('3AG Accounts did not return an email address.'));
         }
 
         $user = User::query()->where('sso_id', $oidcUser->getId())->first()
@@ -88,5 +98,15 @@ class AccountsSsoController extends Controller
         return redirect()->intended(
             $this->redirectPathForCurrentOrganization(request(), '/dashboard'),
         );
+    }
+
+    /**
+     * Send the guest back to the homepage with a toast explaining the failure.
+     */
+    private function failed(string $message): RedirectResponse
+    {
+        Inertia::flash('toast', ['type' => 'error', 'message' => $message]);
+
+        return redirect('/');
     }
 }
