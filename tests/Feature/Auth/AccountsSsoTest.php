@@ -1,112 +1,215 @@
 <?php
 
+use App\Models\OrganizationInvitation;
 use App\Models\User;
+use App\Services\Auth\AccountsOidcException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Exceptions;
-use InvalidArgumentException;
-use Laravel\Socialite\Facades\Socialite;
-use Laravel\Socialite\Two\AbstractProvider;
-use Laravel\Socialite\Two\User as SocialiteUser;
-use Mockery;
+use Illuminate\Support\Facades\Http;
 
-test('guests visiting login are sent to the accounts sso redirect', function () {
-    $this->get(route('login'))
-        ->assertRedirect(route('auth.accounts.redirect'));
+test('the login route hands the guest off to accounts', function () {
+    $this->get(route('login'))->assertRedirect(route('auth.accounts.redirect'));
 });
 
-test('guests visiting register are sent to the accounts sso redirect', function () {
-    $this->get(route('register'))
-        ->assertRedirect(route('auth.accounts.redirect'));
+test('the register route hands the guest off to accounts too', function () {
+    $this->get(route('register'))->assertRedirect(route('auth.accounts.redirect'));
 });
 
-test('login with an invitation stores it for after sso', function () {
-    $this->get(route('login', ['invitation' => 'invite-code-123']))
+test('an invitation code survives the round trip through accounts', function () {
+    $this->get(route('login', ['invitation' => 'the-code']))
         ->assertRedirect(route('auth.accounts.redirect'))
-        ->assertSessionHas('organization_invitation', 'invite-code-123');
+        ->assertSessionHas('organization_invitation', 'the-code');
 });
 
-test('the accounts sso button redirects guests to the identity provider', function () {
-    $redirect = redirect()->away('http://127.0.0.1:8000/oauth/authorize?prompt=consent');
+test('the redirect sends the guest to the discovered authorization endpoint', function () {
+    fakeAccounts();
 
-    $provider = Mockery::mock(AbstractProvider::class);
-    $provider->shouldReceive('with')
-        ->once()
-        ->with(['prompt' => 'consent'])
-        ->andReturnSelf();
-    $provider->shouldReceive('redirect')->andReturn($redirect);
+    $response = $this->get(route('auth.accounts.redirect'));
 
-    Socialite::shouldReceive('driver')
-        ->with('oidc_accounts')
-        ->andReturn($provider);
+    $location = (string) $response->headers->get('Location');
 
-    $this->get(route('auth.accounts.redirect'))
-        ->assertRedirect('http://127.0.0.1:8000/oauth/authorize?prompt=consent');
+    expect($location)->toStartWith('https://accounts.test/oauth/authorize?');
+
+    $query = [];
+    parse_str((string) parse_url($location, PHP_URL_QUERY), $query);
+
+    expect($query)
+        ->toHaveKey('client_id', 'test-client-id')
+        ->toHaveKey('redirect_uri', 'http://localhost/auth/accounts/callback')
+        ->toHaveKey('response_type', 'code')
+        ->toHaveKey('scope', 'openid profile email')
+        // Accounts shows the continue-as / switch-account screen every time.
+        ->toHaveKey('prompt', 'consent')
+        ->toHaveKey('code_challenge_method', 'S256');
+
+    expect(session('accounts_oidc_state'))->toBe($query['state']);
+});
+
+test('the code challenge is the S256 hash of the stored verifier', function () {
+    fakeAccounts();
+
+    $response = $this->get(route('auth.accounts.redirect'));
+
+    $query = [];
+    parse_str((string) parse_url((string) $response->headers->get('Location'), PHP_URL_QUERY), $query);
+
+    $expected = rtrim(strtr(base64_encode(hash('sha256', (string) session('accounts_oidc_verifier'), true)), '+/', '-_'), '=');
+
+    expect($query['code_challenge'])->toBe($expected);
 });
 
 test('a misconfigured identity provider sends the guest home instead of erroring', function () {
     Exceptions::fake();
 
-    Socialite::shouldReceive('driver')
-        ->with('oidc_accounts')
-        ->andThrow(new InvalidArgumentException('OIDC: base_url is not configured.'));
+    config()->set('oidc.connections.accounts.base_url', null);
 
     $this->get(route('auth.accounts.redirect'))
         ->assertRedirect('/')
         ->assertInertiaFlash('toast.type', 'error');
 
-    Exceptions::assertReported(InvalidArgumentException::class);
+    Exceptions::assertReported(AccountsOidcException::class);
+});
+
+test('an unreachable identity provider sends the guest home instead of erroring', function () {
+    Exceptions::fake();
+
+    Http::fake(['accounts.test/*' => Http::response('', 503)]);
+
+    $this->get(route('auth.accounts.redirect'))
+        ->assertRedirect('/')
+        ->assertInertiaFlash('toast.type', 'error');
+
+    Exceptions::assertReported(AccountsOidcException::class);
 });
 
 test('the accounts callback creates a local user and signs them in', function () {
-    $socialiteUser = (new SocialiteUser)->map([
-        'id' => 'oidc-sub-42',
-        'name' => 'SSO Tester',
-        'email' => 'sso-tester@3ag.local',
-    ]);
+    signInThroughAccounts();
 
-    Socialite::shouldReceive('driver')
-        ->with('oidc_accounts')
-        ->andReturnSelf();
-    Socialite::shouldReceive('user')->andReturn($socialiteUser);
+    $this->get(route('auth.accounts.callback', ['code' => 'the-code', 'state' => 'state']))
+        ->assertRedirect(route('onboarding'));
 
-    $this->get(route('auth.accounts.callback'))
-        ->assertRedirect();
+    $user = User::query()->where('email', 'signer@example.com')->firstOrFail();
 
-    $user = User::query()->where('email', 'sso-tester@3ag.local')->first();
+    expect($user->sso_id)->toBe('oidc-sub-42')
+        ->and($user->name)->toBe('The Signer')
+        ->and($user->email_verified_at)->not->toBeNull();
 
-    expect($user)->not->toBeNull()
-        ->and($user->sso_id)->toBe('oidc-sub-42')
-        ->and($user->name)->toBe('SSO Tester')
-        ->and(Auth::id())->toBe($user->id);
+    expect(Auth::id())->toBe($user->id);
 });
 
-test('the accounts callback links an existing user by email', function () {
-    $existing = User::factory()->create([
-        'email' => 'existing@3ag.local',
-        'name' => 'Existing User',
-        'sso_id' => null,
-    ]);
+test('the code is exchanged with the verifier the redirect stored', function () {
+    signInThroughAccounts();
 
-    $socialiteUser = (new SocialiteUser)->map([
-        'id' => 'oidc-sub-99',
-        'name' => 'Existing User',
-        'email' => 'existing@3ag.local',
-    ]);
+    $this->get(route('auth.accounts.callback', ['code' => 'the-code', 'state' => 'state']));
 
-    Socialite::shouldReceive('driver')
-        ->with('oidc_accounts')
-        ->andReturnSelf();
-    Socialite::shouldReceive('user')->andReturn($socialiteUser);
-
-    $this->get(route('auth.accounts.callback'))
-        ->assertRedirect();
-
-    expect($existing->fresh()->sso_id)->toBe('oidc-sub-99')
-        ->and(Auth::id())->toBe($existing->id)
-        ->and(User::query()->where('email', 'existing@3ag.local')->count())->toBe(1);
+    Http::assertSent(fn ($request) => $request->url() === 'https://accounts.test/oauth/token'
+        && $request['grant_type'] === 'authorization_code'
+        && $request['code'] === 'the-code'
+        && $request['code_verifier'] === 'a-verifier'
+        && $request['client_secret'] === 'test-client-secret');
 });
 
-test('users can logout', function () {
+test('a member of an organization lands on its dashboard', function () {
+    $user = User::factory()->create(['sso_id' => 'oidc-sub-42']);
+
+    signInThroughAccounts();
+
+    $this->get(route('auth.accounts.callback', ['code' => 'the-code', 'state' => 'state']))
+        ->assertRedirect("/{$user->currentOrganization->slug}/dashboard");
+});
+
+test('an existing user is matched on their subject even after an email change', function () {
+    $user = User::factory()->create(['sso_id' => 'oidc-sub-42', 'email' => 'old@example.com']);
+
+    signInThroughAccounts();
+
+    $this->get(route('auth.accounts.callback', ['code' => 'the-code', 'state' => 'state']));
+
+    expect(User::query()->count())->toBe(1)
+        ->and($user->fresh()->email)->toBe('signer@example.com');
+
+    expect(Auth::id())->toBe($user->id);
+});
+
+test('an account that predates single sign-on is adopted by email', function () {
+    $user = User::factory()->create(['email' => 'signer@example.com']);
+
+    signInThroughAccounts();
+
+    $this->get(route('auth.accounts.callback', ['code' => 'the-code', 'state' => 'state']));
+
+    expect(User::query()->count())->toBe(1)
+        ->and($user->fresh()->sso_id)->toBe('oidc-sub-42');
+
+    expect(Auth::id())->toBe($user->id);
+});
+
+test('a guest invited to an organization lands on the invitations page', function () {
+    $owner = User::factory()->create();
+
+    $invitation = OrganizationInvitation::factory()->create([
+        'organization_id' => $owner->currentOrganization->id,
+        'email' => 'signer@example.com',
+        'invited_by' => $owner->id,
+    ]);
+
+    signInThroughAccounts();
+
+    $this->withSession(['organization_invitation' => $invitation->code])
+        ->get(route('auth.accounts.callback', ['code' => 'the-code', 'state' => 'state']))
+        ->assertRedirect(route('invitations.index'));
+});
+
+test('a callback whose state does not match the session is refused', function () {
+    Exceptions::fake();
+
+    signInThroughAccounts();
+
+    $this->get(route('auth.accounts.callback', ['code' => 'the-code', 'state' => 'forged']))
+        ->assertRedirect('/')
+        ->assertInertiaFlash('toast.type', 'error');
+
+    $this->assertGuest();
+
+    Http::assertNotSent(fn ($request) => $request->url() === 'https://accounts.test/oauth/token');
+});
+
+test('a callback cannot be replayed once its state is spent', function () {
+    signInThroughAccounts();
+
+    $callback = route('auth.accounts.callback', ['code' => 'the-code', 'state' => 'state']);
+
+    $this->get($callback);
+
+    Auth::logout();
+    Exceptions::fake();
+
+    $this->get($callback)->assertRedirect('/');
+
+    $this->assertGuest();
+});
+
+test('accounts without an email address cannot sign in', function () {
+    signInThroughAccounts(['email' => null]);
+
+    $this->get(route('auth.accounts.callback', ['code' => 'the-code', 'state' => 'state']))
+        ->assertRedirect('/')
+        ->assertInertiaFlash('toast.message', '3AG Accounts did not return an email address.');
+
+    $this->assertGuest();
+
+    expect(User::query()->count())->toBe(0);
+});
+
+test('a nameless account falls back to the local part of the email', function () {
+    signInThroughAccounts(['name' => null]);
+
+    $this->get(route('auth.accounts.callback', ['code' => 'the-code', 'state' => 'state']));
+
+    expect(User::query()->firstOrFail()->name)->toBe('signer');
+});
+
+test('logging out ends the local session', function () {
     $user = User::factory()->create();
 
     $this->actingAs($user)
@@ -114,4 +217,11 @@ test('users can logout', function () {
         ->assertRedirect('/');
 
     $this->assertGuest();
+});
+
+test('a signed-in user is kept away from the sso entry points', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->get(route('login'))->assertRedirect();
+    $this->actingAs($user)->get(route('auth.accounts.redirect'))->assertRedirect();
 });
