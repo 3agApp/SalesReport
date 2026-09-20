@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ShopPlatform;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -44,7 +45,21 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/**
+ * Build the fields the shop form expects, so a test states only what it
+ * is actually about.
+ *
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function validShopData(array $overrides = []): array
 {
-    // ..
+    return [
+        'name' => 'Toys Online',
+        'url' => 'https://toysonline.test',
+        'platform' => ShopPlatform::WooCommerce->value,
+        'consumer_key' => 'ck_'.str_repeat('a', 40),
+        'consumer_secret' => 'cs_'.str_repeat('b', 40),
+        ...$overrides,
+    ];
 }

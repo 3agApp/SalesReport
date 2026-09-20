@@ -15,22 +15,6 @@ beforeEach(function () {
     Queue::fake();
 });
 
-/**
- * @param  array<string, mixed>  $overrides
- * @return array<string, mixed>
- */
-function validShopData(array $overrides = []): array
-{
-    return [
-        'name' => 'Toys Online',
-        'url' => 'https://toysonline.test',
-        'platform' => ShopPlatform::WooCommerce->value,
-        'consumer_key' => 'ck_'.str_repeat('a', 40),
-        'consumer_secret' => 'cs_'.str_repeat('b', 40),
-        ...$overrides,
-    ];
-}
-
 test('organization members can see the shops page', function () {
     $user = User::factory()->create();
     $organization = $user->currentOrganization;
@@ -396,7 +380,7 @@ test('an ordinary shop address is still accepted', function () {
     $user = User::factory()->create();
     $organization = $user->currentOrganization;
 
-    $this->resolveHostsTo(['203.0.113.10']);
+    $this->resolveHostsTo(['93.184.215.14']);
 
     $this
         ->actingAs($user)

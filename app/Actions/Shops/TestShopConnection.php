@@ -5,6 +5,7 @@ namespace App\Actions\Shops;
 use App\Data\ShopConnectionResult;
 use App\Enums\ShopConnectionStatus;
 use App\Models\Shop;
+use App\Services\Network\UnsafeDestinationException;
 use App\Services\WooCommerce\WooCommerceClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
@@ -45,6 +46,14 @@ class TestShopConnection
 
         try {
             $response = $this->client->get($shop, 'orders', $query);
+        } catch (UnsafeDestinationException) {
+            // Deliberately not the resolved address: whoever typed the URL
+            // does not need this server's reading of their DNS handed back.
+            return ShopConnectionResult::for(
+                ShopConnectionStatus::Unreachable,
+                'This address points to a private or reserved network, so it is not contacted.',
+                $this->elapsedMs($startedAt),
+            );
         } catch (ConnectionException $exception) {
             return ShopConnectionResult::for(
                 ShopConnectionStatus::Unreachable,
@@ -80,7 +89,7 @@ class TestShopConnection
             // Without _fields the store returns its whole currency list,
             // some twenty kilobytes of it, on every hourly check.
             $response = $this->client->get($shop, 'settings/general/woocommerce_currency', ['_fields' => 'id,value']);
-        } catch (ConnectionException) {
+        } catch (ConnectionException|UnsafeDestinationException) {
             return null;
         }
 
