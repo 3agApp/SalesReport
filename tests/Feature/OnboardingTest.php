@@ -72,16 +72,13 @@ test('creating a first organization makes it the current organization', function
         ->and($user->fresh()->ownsOrganization($organization))->toBeTrue();
 });
 
-test('users without an organization are sent to onboarding after signing in via sso', function () {
-    User::factory()->withoutOrganization()->create([
-        'email' => 'signer@example.com',
-        'sso_id' => null,
-    ]);
+test('users without an organization are sent to onboarding after logging in', function () {
+    $user = User::factory()->withoutOrganization()->create();
 
-    signInThroughAccounts();
-
-    $this->get(route('auth.accounts.callback', ['code' => 'the-code', 'state' => 'state']))
-        ->assertRedirect(route('onboarding'));
+    $this->post(route('login.store'), [
+        'email' => $user->email,
+        'password' => 'password',
+    ])->assertRedirect(route('onboarding'));
 });
 
 test('declining the last invitation without an organization returns to onboarding', function () {
