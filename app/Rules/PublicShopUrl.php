@@ -2,7 +2,8 @@
 
 namespace App\Rules;
 
-use App\Services\Net\HostResolver;
+use App\Services\Network\PublicHostGuard;
+use App\Services\Network\UnsafeDestinationException;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Translation\PotentiallyTranslatedString;
@@ -14,10 +15,13 @@ use Illuminate\Translation\PotentiallyTranslatedString;
  * attached, and the outcome is reported back in the interface. Without this a
  * member could aim a "shop" at a cloud metadata endpoint or an internal
  * service and read the difference between a refused port and an open one.
+ *
+ * This is the early feedback, not the protection. DNS can answer differently
+ * after the form is saved, so the client checks and pins every request too.
  */
 class PublicShopUrl implements ValidationRule
 {
-    public function __construct(private HostResolver $resolver) {}
+    public function __construct(private PublicHostGuard $guard) {}
 
     /**
      * Run the validation rule.
@@ -34,6 +38,10 @@ class PublicShopUrl implements ValidationRule
             return;
         }
 
+        if (config('services.woocommerce.allow_private_hosts')) {
+            return;
+        }
+
         // An IPv6 literal arrives wrapped in brackets.
         $host = trim($host, '[]');
 
@@ -46,26 +54,13 @@ class PublicShopUrl implements ValidationRule
             return;
         }
 
-        foreach ($this->resolver->addressesFor($host) as $address) {
-            if ($this->isPublic($address)) {
-                continue;
-            }
-
+        try {
+            // A host that does not resolve passes here. It may simply be down
+            // while someone corrects a typo elsewhere on the form, and the
+            // client refuses to connect to it either way.
+            $this->guard->publicAddresses($host);
+        } catch (UnsafeDestinationException) {
             $fail(__('That address resolves to a private network and cannot be reached as a shop.'));
-
-            return;
         }
-    }
-
-    /**
-     * Determine whether an address is out on the public internet.
-     */
-    private function isPublic(string $address): bool
-    {
-        return filter_var(
-            $address,
-            FILTER_VALIDATE_IP,
-            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE,
-        ) !== false;
     }
 }

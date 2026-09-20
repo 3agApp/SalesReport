@@ -36,6 +36,11 @@ return [
     ],
 
     'woocommerce' => [
+        // Lets a shop live on a private or loopback address, for a fake shop
+        // during local development. Never enable it where the app runs next
+        // to anything a user should not be able to reach through it.
+        'allow_private_hosts' => (bool) env('WOOCOMMERCE_ALLOW_PRIVATE_HOSTS', env('APP_ENV') === 'local'),
+
         'connect_timeout' => (int) env('WOOCOMMERCE_CONNECT_TIMEOUT', 5),
         'timeout' => (int) env('WOOCOMMERCE_TIMEOUT', 10),
         'recheck_after_minutes' => (int) env('WOOCOMMERCE_RECHECK_AFTER_MINUTES', 60),
