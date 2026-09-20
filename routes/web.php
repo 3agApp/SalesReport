@@ -32,11 +32,11 @@ Route::post('logout', LogoutController::class)
     ->name('logout');
 
 Route::get('onboarding', OnboardingController::class)
-    ->middleware(['auth', 'verified'])
+    ->middleware(['auth'])
     ->name('onboarding');
 
 Route::prefix('{current_organization}')
-    ->middleware(['auth', 'verified', EnsureOrganizationMembership::class])
+    ->middleware(['auth', EnsureOrganizationMembership::class])
     ->scopeBindings()
     ->group(function () {
         Route::get('dashboard', DashboardController::class)->name('dashboard');
@@ -62,7 +62,7 @@ Route::prefix('{current_organization}')
     });
 
 Route::get('invitations', [OrganizationInvitationController::class, 'index'])
-    ->middleware(['auth', 'verified'])
+    ->middleware(['auth'])
     ->name('invitations.index');
 
 Route::middleware(['auth'])->group(function () {
