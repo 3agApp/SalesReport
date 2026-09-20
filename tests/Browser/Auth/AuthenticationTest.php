@@ -2,6 +2,7 @@
 
 use App\Models\Organization;
 use App\Models\User;
+use Illuminate\Support\Facades\URL;
 
 test('a user signs in through the login form and lands on the dashboard of their organization', function () {
     $organization = Organization::factory()->create(['name' => 'Toys Online Group']);
@@ -33,4 +34,25 @@ test('the login form shows the validation message when the password is wrong', f
         ->assertNoJavaScriptErrors();
 
     $this->assertGuest();
+});
+
+test('an unverified user is held at the verification prompt until they verify', function () {
+    $user = User::factory()->unverified()->create();
+
+    $this->actingAs($user);
+
+    visit(route('dashboard', $user->currentOrganization))
+        ->assertPathIs('/email/verify')
+        ->assertSee('Resend verification email')
+        ->assertNoJavaScriptErrors();
+
+    // The link the verification mail carries.
+    visit(URL::temporarySignedRoute('verification.verify', now()->addHour(), [
+        'id' => $user->id,
+        'hash' => sha1($user->email),
+    ]))
+        ->assertPathIs("/{$user->currentOrganization->slug}/dashboard")
+        ->assertNoJavaScriptErrors();
+
+    expect($user->fresh()->hasVerifiedEmail())->toBeTrue();
 });

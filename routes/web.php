@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\Organizations\OrganizationInvitationController;
 use App\Http\Controllers\Reports\OrderStatusController;
@@ -15,11 +16,17 @@ use Illuminate\Support\Facades\Route;
 Route::inertia('/', 'welcome')->name('home');
 
 Route::get('onboarding', OnboardingController::class)
-    ->middleware(['auth'])
+    ->middleware(['auth', 'verified'])
     ->name('onboarding');
 
+// Every real dashboard is under an organization. This is the bare path
+// Fortify redirects to from config('fortify.home').
+Route::get('dashboard', DashboardRedirectController::class)
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard.redirect');
+
 Route::prefix('{current_organization}')
-    ->middleware(['auth', EnsureOrganizationMembership::class])
+    ->middleware(['auth', 'verified', EnsureOrganizationMembership::class])
     ->scopeBindings()
     ->group(function () {
         Route::get('dashboard', DashboardController::class)->name('dashboard');
@@ -45,10 +52,12 @@ Route::prefix('{current_organization}')
     });
 
 Route::get('invitations', [OrganizationInvitationController::class, 'index'])
-    ->middleware(['auth'])
+    ->middleware(['auth', 'verified'])
     ->name('invitations.index');
 
-Route::middleware(['auth'])->group(function () {
+// Accepting an invitation joins an account to an organization that was
+// invited by email, so the address has to be proven before it is used.
+Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('invitations/{invitation}/accept', [OrganizationInvitationController::class, 'accept'])->name('invitations.accept');
     Route::delete('invitations/{invitation}', [OrganizationInvitationController::class, 'decline'])->name('invitations.decline');
 });
