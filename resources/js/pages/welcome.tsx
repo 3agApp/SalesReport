@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Button } from '@/components/ui/button';
-import { dashboard, home, login } from '@/routes';
+import { dashboard, home, login, register } from '@/routes';
 
 const features = [
     {
@@ -100,17 +100,10 @@ export default function Welcome() {
                         ) : (
                             <>
                                 <Button variant="ghost" asChild>
-                                    <a href={login.url()} data-test="sso-login">
-                                        Log in
-                                    </a>
+                                    <Link href={login()}>Log in</Link>
                                 </Button>
                                 <Button asChild>
-                                    <a
-                                        href={login.url()}
-                                        data-test="sso-get-started"
-                                    >
-                                        Get started
-                                    </a>
+                                    <Link href={register()}>Get started</Link>
                                 </Button>
                             </>
                         )}
@@ -133,26 +126,18 @@ export default function Welcome() {
                         </p>
                         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                             <Button size="lg" asChild>
-                                {auth.user ? (
-                                    <Link href={dashboardUrl}>
-                                        Open dashboard
-                                        <ArrowRight />
-                                    </Link>
-                                ) : (
-                                    <a href={login.url()} data-test="sso-start">
-                                        Start for free
-                                        <ArrowRight />
-                                    </a>
-                                )}
+                                <Link
+                                    href={auth.user ? dashboardUrl : register()}
+                                >
+                                    {auth.user
+                                        ? 'Open dashboard'
+                                        : 'Start for free'}
+                                    <ArrowRight />
+                                </Link>
                             </Button>
                             {auth.user ? null : (
                                 <Button size="lg" variant="outline" asChild>
-                                    <a
-                                        href={login.url()}
-                                        data-test="sso-login-secondary"
-                                    >
-                                        Log in
-                                    </a>
+                                    <Link href={login()}>Log in</Link>
                                 </Button>
                             )}
                         </div>
