@@ -39,3 +39,15 @@ test('the onboarding form shows the validation message for a reserved organizati
 
     $this->assertDatabaseCount('organizations', 0);
 });
+
+test('the welcome page sends a user without an organization to onboarding', function () {
+    $user = User::factory()->withoutOrganization()->create();
+
+    $this->actingAs($user);
+
+    visit(route('home'))
+        ->click('Dashboard')
+        ->assertPathIs('/onboarding')
+        ->assertSee('Create your first organization')
+        ->assertNoJavaScriptErrors();
+});
