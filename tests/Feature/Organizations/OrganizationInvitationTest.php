@@ -337,3 +337,28 @@ test('nobody can invite a second organization owner', function () {
     $this->assertDatabaseCount('organization_invitations', 0);
     Notification::assertNothingSent();
 });
+
+test('an invitation can be accepted by someone who belongs to no organization yet', function () {
+    // The ordinary path for a new hire: invited, signed up, no organization.
+    // to_route('dashboard') needs a current_organization, so this only works
+    // because accepting switches them into it first.
+    $owner = User::factory()->create();
+    $invitedUser = User::factory()->withoutOrganization()->create(['email' => 'invited@example.com']);
+    $organization = Organization::factory()->create();
+
+    $organization->members()->attach($owner, ['role' => OrganizationRole::Owner->value]);
+
+    $invitation = OrganizationInvitation::factory()->create([
+        'organization_id' => $organization->id,
+        'email' => 'invited@example.com',
+        'role' => OrganizationRole::Member,
+        'invited_by' => $owner->id,
+    ]);
+
+    $this
+        ->actingAs($invitedUser)
+        ->post(route('invitations.accept', $invitation))
+        ->assertRedirect(route('dashboard', $organization));
+
+    expect($invitedUser->fresh()->currentOrganization->id)->toBe($organization->id);
+});
