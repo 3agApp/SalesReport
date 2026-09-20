@@ -158,9 +158,6 @@ export default function ReportsIndex({
     const heading = (
         <>
             <div className="page-heading">
-                <p className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
-                    {currentOrganization.name}
-                </p>
                 <h1 className="page-title">Reports</h1>
                 <p className="text-muted-foreground text-sm">
                     {filters.rangeLabel} · times shown in{' '}

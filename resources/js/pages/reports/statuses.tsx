@@ -73,9 +73,6 @@ export default function OrderStatuses({
             <Head title="Order statuses" />
             <div className="workspace-page">
                 <div className="page-heading">
-                    <p className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
-                        {currentOrganization.name}
-                    </p>
                     <h1 className="page-title">Order statuses</h1>
                     <p className="text-muted-foreground max-w-2xl text-sm">
                         Every status your shops have actually used. Each shop

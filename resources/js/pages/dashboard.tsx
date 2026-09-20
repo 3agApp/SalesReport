@@ -108,9 +108,6 @@ export default function Dashboard({ stats, recentShops, permissions }: Props) {
             <Head title="Dashboard" />
             <div className="workspace-page">
                 <div className="page-heading">
-                    <p className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
-                        {currentOrganization.name}
-                    </p>
                     <h1 className="page-title">Dashboard</h1>
                     <p className="text-muted-foreground text-sm">
                         Where {currentOrganization.name} stands today.

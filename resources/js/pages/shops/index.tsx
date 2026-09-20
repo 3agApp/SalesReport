@@ -158,9 +158,6 @@ export default function ShopsIndex({
             <div className="workspace-page">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="page-heading">
-                        <p className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
-                            Organization shops
-                        </p>
                         <h1 className="page-title">Shops</h1>
                         <p className="text-muted-foreground text-sm">
                             The WooCommerce stores {currentOrganization.name}{' '}
