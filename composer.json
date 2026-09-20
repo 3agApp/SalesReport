@@ -14,10 +14,8 @@
         "inertiajs/inertia-laravel": "^3.0",
         "laravel/chisel": "^0.1.0",
         "laravel/framework": "^13.17",
-        "laravel/socialite": "^5.31",
         "laravel/tinker": "^3.0",
-        "laravel/wayfinder": "^0.1.14",
-        "socialiteproviders/openidconnect": "^1.0"
+        "laravel/wayfinder": "^0.1.14"
     },
     "require-dev": {
         "deployer/deployer": "^7.5",

@@ -5,42 +5,34 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Concerns\RedirectsToCurrentOrganization;
 use App\Models\User;
+use App\Services\Auth\AccountsOidc;
+use App\Services\Auth\AccountsUser;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
-use Laravel\Socialite\Facades\Socialite;
-use Laravel\Socialite\Two\AbstractProvider;
-use RuntimeException;
-use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse;
 use Throwable;
 
 class AccountsSsoController extends Controller
 {
     use RedirectsToCurrentOrganization;
 
+    public function __construct(private readonly AccountsOidc $accounts) {}
+
     /**
      * Send the guest to 3AG Accounts for login.
      *
-     * prompt=consent forces Accounts to show the continue-as / switch-account
-     * screen even when the browser already has an Accounts session.
-     *
-     * Building the provider reaches out to the issuer for its discovery
-     * document, so an unreachable or misconfigured Accounts takes the whole
-     * login route down with it. Report it and send the guest back to the
-     * homepage with a message, as the callback already does.
+     * Building the URL reaches out to the issuer for its discovery document,
+     * so an unreachable or misconfigured Accounts would otherwise take the
+     * whole login route down with it. Report it and send the guest back to
+     * the homepage with a message, as the callback does.
      */
-    public function redirect(): SymfonyRedirectResponse
+    public function redirect(Request $request): RedirectResponse
     {
         try {
-            $provider = Socialite::driver('oidc_accounts');
-
-            if (! $provider instanceof AbstractProvider) {
-                throw new RuntimeException('The oidc_accounts driver must be an OAuth 2 provider.');
-            }
-
-            return $provider->with(['prompt' => 'consent'])->redirect();
+            return redirect()->away($this->accounts->authorizeUrl($request));
         } catch (Throwable $exception) {
             report($exception);
 
@@ -51,53 +43,72 @@ class AccountsSsoController extends Controller
     /**
      * Finish the OIDC callback and start a local SalesReport session.
      */
-    public function callback(): RedirectResponse
+    public function callback(Request $request): RedirectResponse
     {
         try {
-            $oidcUser = Socialite::driver('oidc_accounts')->user();
+            $accountsUser = $this->accounts->user($request);
         } catch (Throwable $exception) {
             report($exception);
 
             return $this->failed(__('Could not sign in with 3AG Accounts. Please try again.'));
         }
 
-        $email = $oidcUser->getEmail();
+        $email = $accountsUser->email;
 
         if (! filled($email)) {
             return $this->failed(__('3AG Accounts did not return an email address.'));
         }
 
-        $user = User::query()->where('sso_id', $oidcUser->getId())->first()
-            ?? User::query()->where('email', Str::lower($email))->first();
-
-        if ($user) {
-            $user->forceFill([
-                'sso_id' => $oidcUser->getId(),
-                'name' => $oidcUser->getName() ?: $user->name,
-                'email' => Str::lower($email),
-                'email_verified_at' => $user->email_verified_at ?? now(),
-            ])->save();
-        } else {
-            $user = User::query()->create([
-                'sso_id' => $oidcUser->getId(),
-                'name' => $oidcUser->getName() ?: Str::before($email, '@'),
-                'email' => Str::lower($email),
-                'email_verified_at' => now(),
-                'password' => Hash::make(Str::password(32)),
-            ]);
-        }
+        $user = $this->link($accountsUser, Str::lower($email));
 
         Auth::login($user, remember: true);
 
-        $invitation = request()->session()->pull('organization_invitation');
+        $request->session()->regenerate();
+
+        $invitation = $request->session()->pull('organization_invitation');
 
         if (is_string($invitation) && $invitation !== '') {
             return redirect()->route('invitations.index');
         }
 
         return redirect()->intended(
-            $this->redirectPathForCurrentOrganization(request(), '/dashboard'),
+            $this->redirectPathForCurrentOrganization($request, '/dashboard'),
         );
+    }
+
+    /**
+     * Find the local user behind the Accounts subject, or create one.
+     *
+     * The subject is matched first so an address changed in Accounts follows
+     * the same person here. Email is the fallback that adopts the accounts
+     * that existed before single sign-on.
+     */
+    private function link(AccountsUser $accountsUser, string $email): User
+    {
+        $user = User::query()->where('sso_id', $accountsUser->id)->first()
+            ?? User::query()->where('email', $email)->first();
+
+        // forceFill throughout: email_verified_at is not mass assignable, and
+        // Accounts has already verified the address either way.
+        if (! $user) {
+            $user = new User;
+
+            $user->forceFill([
+                'name' => $accountsUser->name ?: Str::before($email, '@'),
+                // Nothing signs in with this, but the column is not nullable
+                // and a value no one holds is safer than a shared placeholder.
+                'password' => Hash::make(Str::password(32)),
+            ]);
+        }
+
+        $user->forceFill([
+            'sso_id' => $accountsUser->id,
+            'name' => $accountsUser->name ?: $user->name,
+            'email' => $email,
+            'email_verified_at' => $user->email_verified_at ?? now(),
+        ])->save();
+
+        return $user;
     }
 
     /**
