@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
@@ -71,6 +72,20 @@ class Organization extends Model
         return $this->members()
             ->wherePivot('role', OrganizationRole::Owner->value)
             ->first();
+    }
+
+    /**
+     * The membership of the organization's owner.
+     *
+     * owner() answers with the user and runs a query each time. This is the
+     * relation, so a listing can eager load the owner and sort or search on
+     * their address without a query per row.
+     *
+     * @return HasOne<Membership, $this>
+     */
+    public function ownerMembership(): HasOne
+    {
+        return $this->hasOne(Membership::class)->where('role', OrganizationRole::Owner->value);
     }
 
     /**

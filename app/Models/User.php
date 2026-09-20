@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Concerns\HasOrganizations;
 use Database\Factories\UserFactory;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -36,10 +38,28 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  */
 #[Fillable(['name', 'email', 'password', 'current_organization_id'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
-class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
+class User extends Authenticatable implements FilamentUser, MustVerifyEmail, PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasOrganizations, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
+
+    /**
+     * Determine if the user is the admin named by the ADMIN_EMAIL setting.
+     */
+    public function isAdmin(): bool
+    {
+        $email = config('admin.email');
+
+        return filled($email) && strcasecmp($this->email, $email) === 0;
+    }
+
+    /**
+     * Determine if the user can open the given Filament panel.
+     */
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return $this->isAdmin();
+    }
 
     /**
      * Get the attributes that should be cast.
