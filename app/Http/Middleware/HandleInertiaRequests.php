@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\OrganizationInvitation;
+use App\Support\Impersonation;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -43,7 +44,9 @@ class HandleInertiaRequests extends Middleware
             'name' => config('app.name'),
             'auth' => [
                 'user' => $user,
+                'isAdmin' => (bool) $user?->isAdmin(),
             ],
+            'impersonating' => fn () => app(Impersonation::class)->isImpersonating(),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'currentOrganization' => fn () => $user?->currentOrganization ? $user->toUserOrganization($user->currentOrganization) : null,
             'organizations' => fn () => $user?->toUserOrganizations(includeCurrent: true) ?? [],

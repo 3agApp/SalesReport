@@ -12,6 +12,7 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string;
             auth: Auth;
+            impersonating: boolean;
             sidebarOpen: boolean;
             currentOrganization: Organization | null;
             organizations: Organization[];
