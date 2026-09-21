@@ -1,5 +1,4 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import type { LucideIcon } from 'lucide-react';
 import {
     ChevronLeft,
     ChevronRight,
@@ -15,7 +14,7 @@ import {
     TriangleAlert,
     X,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import DeleteShopModal from '@/components/delete-shop-modal';
 import ShopFormModal from '@/components/shop-form-modal';
 import StatusBadge, {
@@ -23,6 +22,8 @@ import StatusBadge, {
     StatusTooltip,
 } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
+import PaginationArrow from '@/components/pagination-arrow';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -76,13 +77,34 @@ export default function ShopsIndex({
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [shopToDelete, setShopToDelete] = useState<Shop | null>(null);
     const [testingShopId, setTestingShopId] = useState<number | null>(null);
-    const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+    const debouncedSearch = useDebouncedValue(search);
 
+    const applySearch = (value: string) => {
+        if (!currentOrganization) {
+            return;
+        }
+
+        router.get(
+            shopsIndex(currentOrganization.slug).url,
+            value ? { search: value } : {},
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    };
+
+    /**
+     * The server value is the source of truth, so a visit only fires when the
+     * settled input disagrees with it. That skips the pointless request on
+     * mount and converges rather than looping once our own response lands.
+     */
     useEffect(() => {
-        const timeout = searchTimeout;
+        const term = debouncedSearch.trim();
 
-        return () => clearTimeout(timeout.current);
-    }, []);
+        if (term === filters.search) {
+            return;
+        }
+
+        applySearch(term);
+    }, [debouncedSearch, filters.search]);
 
     if (!currentOrganization) {
         return null;
@@ -92,25 +114,7 @@ export default function ShopsIndex({
     const canManageShops =
         permissions.canUpdateShop || permissions.canDeleteShop;
 
-    const applySearch = (value: string) => {
-        router.get(
-            shopsIndex(currentOrganization.slug).url,
-            value ? { search: value } : {},
-            { preserveState: true, preserveScroll: true, replace: true },
-        );
-    };
-
-    const handleSearchChange = (value: string) => {
-        setSearch(value);
-        clearTimeout(searchTimeout.current);
-        searchTimeout.current = setTimeout(
-            () => applySearch(value.trim()),
-            300,
-        );
-    };
-
     const clearFilters = () => {
-        clearTimeout(searchTimeout.current);
         setSearch('');
         applySearch('');
     };
@@ -201,7 +205,7 @@ export default function ShopsIndex({
                                 type="search"
                                 value={search}
                                 onChange={(event) =>
-                                    handleSearchChange(event.target.value)
+                                    setSearch(event.target.value)
                                 }
                                 placeholder="Search by name or URL"
                                 aria-label="Search shops"
@@ -485,6 +489,7 @@ export default function ShopsIndex({
                                         href={shops.prev_page_url}
                                         label="Previous page"
                                         icon={ChevronLeft}
+                                        test="pagination-previous"
                                     />
                                     {shops.links
                                         .slice(1, -1)
@@ -527,6 +532,7 @@ export default function ShopsIndex({
                                         href={shops.next_page_url}
                                         label="Next page"
                                         icon={ChevronRight}
+                                        test="pagination-next"
                                     />
                                 </nav>
                             ) : null}
@@ -550,34 +556,6 @@ export default function ShopsIndex({
                 onOpenChange={setDeleteOpen}
             />
         </>
-    );
-}
-
-function PaginationArrow({
-    href,
-    label,
-    icon: Icon,
-}: {
-    href: string | null;
-    label: string;
-    icon: LucideIcon;
-}) {
-    if (!href) {
-        return (
-            <Button variant="ghost" size="icon" className="size-8" disabled>
-                <Icon />
-                <span className="sr-only">{label}</span>
-            </Button>
-        );
-    }
-
-    return (
-        <Button variant="ghost" size="icon" className="size-8" asChild>
-            <Link href={href} preserveScroll preserveState>
-                <Icon />
-                <span className="sr-only">{label}</span>
-            </Link>
-        </Button>
     );
 }
 
