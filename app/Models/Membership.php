@@ -3,18 +3,18 @@
 namespace App\Models;
 
 use App\Enums\OrganizationRole;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Pivot;
-use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
  * @property int $organization_id
  * @property int $user_id
  * @property OrganizationRole $role
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property CarbonImmutable|null $created_at
+ * @property CarbonImmutable|null $updated_at
  * @property-read Organization $organization
  * @property-read User $user
  */

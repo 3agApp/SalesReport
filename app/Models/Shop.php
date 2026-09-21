@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Data\ShopConnectionResult;
 use App\Enums\ShopConnectionStatus;
 use App\Enums\ShopPlatform;
+use Carbon\CarbonImmutable;
 use Database\Factories\ShopFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -15,7 +16,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -29,10 +29,10 @@ use Illuminate\Support\Str;
  * @property string $consumer_secret
  * @property ShopConnectionStatus $connection_status
  * @property string|null $connection_message
- * @property Carbon|null $connection_checked_at
+ * @property CarbonImmutable|null $connection_checked_at
  * @property int|null $connection_response_time_ms
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property CarbonImmutable|null $created_at
+ * @property CarbonImmutable|null $updated_at
  * @property-read Organization $organization
  * @property-read int|null $orders_count
  * @property-read ShopSyncState|null $syncState
