@@ -78,6 +78,26 @@ export type ReportStatusRow = {
     counted: boolean;
 };
 
+/** A figure the by-shop report can show for each shop. */
+export type ShopReportFigure = 'revenue' | 'tax';
+
+export type ReportShopTotalsRow = {
+    shopId: number;
+    name: string;
+    currency: string;
+    orderCount: number;
+    netRevenue: number;
+    tax: number;
+};
+
+export type ReportTotalsByShop = {
+    rows: ReportShopTotalsRow[];
+    /** Null when the shops sold in more than one currency. */
+    currency: string | null;
+    /** Null for the same reason: there is no honest sum across currencies. */
+    totals: { orderCount: number; netRevenue: number; tax: number } | null;
+};
+
 export type ReportOption = { value: string; label: string };
 
 export type ReportShopOption = { id: number; name: string };

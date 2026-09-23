@@ -152,6 +152,70 @@ class SalesReport
     }
 
     /**
+     * Get the net revenue and VAT of every shop in scope, by name, with totals.
+     *
+     * This is the sheet a bookkeeper works the VAT return out from, so every
+     * shop in scope gets a row, including one with no orders: a zero says the
+     * shop was looked at, where a missing row leaves them wondering. A shop
+     * with no orders falls back to the currency it was last seen selling in.
+     *
+     * The totals add up the rounded rows, so they always agree with the
+     * columns above them. They are left out when the shops sold in more than
+     * one currency, for the same reason the rest of the report is.
+     *
+     * @return array{rows: array<int, array{shopId: int, name: string, currency: string, orderCount: int, netRevenue: float, tax: float}>, currency: string|null, totals: array{orderCount: int, netRevenue: float, tax: float}|null}
+     */
+    public function totalsByShop(): array
+    {
+        $totals = $this->orders()
+            ->select('shop_id', 'currency')
+            ->selectRaw('count(*) as order_count')
+            ->selectRaw('coalesce(sum(total) - sum(refunded_total), 0) as net')
+            ->selectRaw('coalesce(sum(total_tax) - sum(refunded_tax), 0) as tax')
+            ->groupBy('shop_id', 'currency')
+            ->toBase()
+            ->get()
+            ->groupBy('shop_id');
+
+        $rows = Shop::query()
+            ->whereIn('id', $this->filters->shopIds)
+            ->orderByRaw('LOWER(name)')
+            ->get()
+            ->flatMap(function (Shop $shop) use ($totals) {
+                $rows = $totals->get($shop->id, collect([(object) [
+                    'currency' => $shop->currency,
+                    'order_count' => 0,
+                    'net' => 0,
+                    'tax' => 0,
+                ]]));
+
+                return $rows->map(fn ($row) => [
+                    'shopId' => $shop->id,
+                    'name' => $shop->name,
+                    'currency' => (string) $row->currency,
+                    'orderCount' => (int) $row->order_count,
+                    'netRevenue' => round((float) $row->net, 2),
+                    'tax' => round((float) $row->tax, 2),
+                ]);
+            })
+            ->values();
+
+        // A shop with nothing to add cannot break the total, whatever it sells in.
+        $currencies = $rows->where('orderCount', '>', 0)->pluck('currency')->filter()->unique()->values();
+        $singleCurrency = $currencies->count() <= 1;
+
+        return [
+            'rows' => $rows->all(),
+            'currency' => $singleCurrency ? ($currencies->first() ?? $rows->pluck('currency')->filter()->first() ?? '') : null,
+            'totals' => $singleCurrency ? [
+                'orderCount' => (int) $rows->sum('orderCount'),
+                'netRevenue' => round($rows->sum('netRevenue'), 2),
+                'tax' => round($rows->sum('tax'), 2),
+            ] : null,
+        ];
+    }
+
+    /**
      * Lay the filtered orders out over time, once.
      *
      * Buckets are built in PHP rather than in SQL because the boundaries have

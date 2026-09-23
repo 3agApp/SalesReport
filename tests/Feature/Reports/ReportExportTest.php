@@ -176,3 +176,47 @@ test('the export stops a spreadsheet running a shop value as a formula', functio
         ->and($csv)->toContain('-80.0000')
         ->and($csv)->not->toContain("'-80.0000");
 });
+
+test('the revenue and vat by shop export ends with the totals', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $shop = Shop::factory()->for($organization)->create(['name' => 'Toys Online', 'currency' => 'CHF']);
+    Shop::factory()->for($organization)->create(['name' => 'Living Nature', 'currency' => 'CHF']);
+
+    Order::factory()->for($shop)->create([
+        'status' => 'completed', 'currency' => 'CHF', 'total' => 120.5, 'refunded_total' => 20.5, 'total_tax' => 9.03, 'refunded_tax' => 1.54,
+        'placed_at' => CarbonImmutable::parse('2026-03-10 12:00', 'Europe/Zurich')->utc(),
+    ]);
+
+    $csv = csvBody($this
+        ->actingAs($user)
+        ->get(route('reports.export.shops', [$organization, 'period' => 'custom', 'from' => '2026-03-01', 'to' => '2026-03-31']))
+        ->assertOk());
+
+    expect($csv)->toContain("\"Living Nature\",CHF,0,0.00,0.00\n")
+        ->and($csv)->toContain("\"Toys Online\",CHF,1,100.00,7.49\n")
+        ->and($csv)->toEndWith("Total,CHF,1,100.00,7.49\n");
+});
+
+test('the by shop export can carry the vat alone', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $shop = Shop::factory()->for($organization)->create(['name' => 'Toys Online', 'currency' => 'CHF']);
+
+    Order::factory()->for($shop)->create([
+        'status' => 'completed', 'currency' => 'CHF', 'total' => 120.5, 'refunded_total' => 20.5, 'total_tax' => 9.03, 'refunded_tax' => 1.54,
+        'placed_at' => CarbonImmutable::parse('2026-03-10 12:00', 'Europe/Zurich')->utc(),
+    ]);
+
+    $response = $this
+        ->actingAs($user)
+        ->get(route('reports.export.shops', [$organization, 'period' => 'custom', 'from' => '2026-03-01', 'to' => '2026-03-31', 'figures' => ['tax']]))
+        ->assertOk();
+
+    $csv = csvBody($response);
+
+    expect($response->headers->get('content-disposition'))->toContain('vat-by-shop')
+        ->and($csv)->toContain("Shop,Currency,Orders,VAT\n")
+        ->and($csv)->toContain("\"Toys Online\",CHF,1,7.49\n")
+        ->and($csv)->toEndWith("Total,CHF,1,7.49\n");
+});

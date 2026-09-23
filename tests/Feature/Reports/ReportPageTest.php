@@ -373,3 +373,57 @@ test('the chart and the per shop trends are read off one walk of the orders', fu
         expect(round(array_sum($row['trend']), 2))->toEqualWithDelta($row['netRevenue'], 0.01);
     }
 });
+
+test('the printable revenue by shop report covers the filtered range', function () {
+    $user = User::factory()->create();
+    $organization = $user->currentOrganization;
+    $shop = Shop::factory()->for($organization)->create(['name' => 'Toys Online', 'currency' => 'CHF']);
+
+    Order::factory()->for($shop)->create([
+        'status' => 'completed', 'currency' => 'CHF', 'total' => 100, 'refunded_total' => 0,
+        'placed_at' => CarbonImmutable::parse('2026-03-10 12:00', 'Europe/Zurich')->utc(),
+    ]);
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.shops', [$organization, 'period' => 'custom', 'from' => '2026-03-01', 'to' => '2026-03-31']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('reports/print/by-shop')
+            ->where('filters.from', '2026-03-01')
+            ->where('report.rows.0.name', 'Toys Online')
+            ->where('report.totals.netRevenue', 100)
+            // Both figures unless only one was asked for.
+            ->where('figures', ['revenue', 'tax'])
+            ->has('countedStatuses')
+        );
+});
+
+test('the printable by shop report can show the vat alone', function () {
+    $user = User::factory()->create();
+    Shop::factory()->for($user->currentOrganization)->create();
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.shops', [$user->currentOrganization, 'figures' => ['tax']]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('figures', ['tax']));
+});
+
+test('the printable by shop report rejects a figure it does not know', function () {
+    $user = User::factory()->create();
+    Shop::factory()->for($user->currentOrganization)->create();
+
+    $this
+        ->actingAs($user)
+        ->get(route('reports.shops', [$user->currentOrganization, 'figures' => ['profit']]))
+        ->assertSessionHasErrors('figures.0');
+});
+
+test('users cannot print the revenue of an organization they do not belong to', function () {
+    $user = User::factory()->create();
+    $organization = Organization::factory()->create();
+
+    $this->actingAs($user)->get(route('reports.shops', $organization))->assertForbidden();
+    $this->actingAs($user)->get(route('reports.export.shops', $organization))->assertForbidden();
+});

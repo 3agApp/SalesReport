@@ -19,6 +19,8 @@ void createInertiaApp({
         switch (true) {
             case name === 'welcome':
             case name === 'error-page':
+            // A sheet of paper, not a screen in the app.
+            case name.startsWith('reports/print/'):
                 return null;
             case name.startsWith('auth/'):
                 return AuthLayout;
