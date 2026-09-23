@@ -270,3 +270,39 @@ test('top products are counted on the same footing as the headline figure', func
 
     expect($top[0]['revenue'])->toBe(107.7);
 });
+
+test('revenue and vat by shop list every shop in scope and add the rows up', function () {
+    $organization = Organization::factory()->create();
+    $tigerbox = Shop::factory()->for($organization)->create(['name' => 'tigerbox', 'currency' => 'CHF']);
+    $pikosch = Shop::factory()->for($organization)->create(['name' => 'Pikosch', 'currency' => 'CHF']);
+    Shop::factory()->for($organization)->create(['name' => 'Living Nature', 'currency' => 'CHF']);
+
+    Order::factory()->for($tigerbox)->create(['status' => 'completed', 'currency' => 'CHF', 'total' => 100.10, 'refunded_total' => 0.05, 'total_tax' => 7.5, 'refunded_tax' => 0.01, 'placed_at' => CarbonImmutable::parse('2026-03-10 12:00', 'Europe/Zurich')]);
+    Order::factory()->for($tigerbox)->create(['status' => 'cancelled', 'currency' => 'CHF', 'total' => 999, 'placed_at' => CarbonImmutable::parse('2026-03-10 12:00', 'Europe/Zurich')]);
+    Order::factory()->for($pikosch)->create(['status' => 'completed', 'currency' => 'CHF', 'total' => 50, 'refunded_total' => 0, 'total_tax' => 3.75, 'refunded_tax' => 0, 'placed_at' => CarbonImmutable::parse('2026-03-11 12:00', 'Europe/Zurich')]);
+
+    $report = (new SalesReport(filtersFor($organization, '2026-03-01', '2026-03-31')))->totalsByShop();
+
+    // By name, and a shop with no orders still reads as a zero.
+    expect(array_column($report['rows'], 'name'))->toBe(['Living Nature', 'Pikosch', 'tigerbox'])
+        ->and(array_column($report['rows'], 'netRevenue'))->toBe([0.0, 50.0, 100.05])
+        // VAT is net of the VAT that went back with a refund.
+        ->and(array_column($report['rows'], 'tax'))->toBe([0.0, 3.75, 7.49])
+        ->and($report['currency'])->toBe('CHF')
+        ->and($report['totals'])->toBe(['orderCount' => 2, 'netRevenue' => 150.05, 'tax' => 11.24]);
+});
+
+test('revenue and vat by shop have no totals when the shops sold in two currencies', function () {
+    $organization = Organization::factory()->create();
+    $swiss = Shop::factory()->for($organization)->create(['name' => 'Swiss', 'currency' => 'CHF']);
+    $german = Shop::factory()->for($organization)->create(['name' => 'German', 'currency' => 'EUR']);
+
+    Order::factory()->for($swiss)->create(['status' => 'completed', 'currency' => 'CHF', 'total' => 100, 'refunded_total' => 0, 'placed_at' => CarbonImmutable::parse('2026-03-10 12:00', 'Europe/Zurich')]);
+    Order::factory()->for($german)->create(['status' => 'completed', 'currency' => 'EUR', 'total' => 80, 'refunded_total' => 0, 'placed_at' => CarbonImmutable::parse('2026-03-10 12:00', 'Europe/Zurich')]);
+
+    $report = (new SalesReport(filtersFor($organization, '2026-03-01', '2026-03-31')))->totalsByShop();
+
+    expect($report['rows'])->toHaveCount(2)
+        ->and($report['currency'])->toBeNull()
+        ->and($report['totals'])->toBeNull();
+});

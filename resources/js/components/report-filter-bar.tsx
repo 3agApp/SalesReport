@@ -4,6 +4,7 @@ import {
     Check,
     ChevronDown,
     Download,
+    Printer,
     SlidersHorizontal,
     Store,
 } from 'lucide-react';
@@ -32,7 +33,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { index as reportsIndex } from '@/routes/reports';
+import { index as reportsIndex, shops as shopsReport } from '@/routes/reports';
 import { index as manageStatuses } from '@/routes/reports/statuses';
 import {
     items as exportItems,
@@ -322,6 +323,34 @@ export default function ReportFilterBar({
                                 data-test="report-export-items"
                             >
                                 Line items (CSV)
+                            </a>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel>
+                            Print or save as PDF
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem asChild>
+                            <a
+                                href={shopsReport.url(organizationSlug, {
+                                    query: { ...query, figures: ['revenue'] },
+                                })}
+                                target="_blank"
+                                rel="noopener"
+                                data-test="report-print-revenue"
+                            >
+                                <Printer /> Revenue by shop
+                            </a>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                            <a
+                                href={shopsReport.url(organizationSlug, {
+                                    query: { ...query, figures: ['tax'] },
+                                })}
+                                target="_blank"
+                                rel="noopener"
+                                data-test="report-print-tax"
+                            >
+                                <Printer /> VAT by shop
                             </a>
                         </DropdownMenuItem>
                     </DropdownMenuContent>

@@ -8,6 +8,7 @@ use App\Http\Controllers\Organizations\OrganizationInvitationController;
 use App\Http\Controllers\Reports\OrderStatusController;
 use App\Http\Controllers\Reports\ReportController;
 use App\Http\Controllers\Reports\ReportExportController;
+use App\Http\Controllers\Reports\ShopReportController;
 use App\Http\Controllers\Shops\ShopConnectionController;
 use App\Http\Controllers\Shops\ShopController;
 use App\Http\Controllers\Shops\ShopOrderSyncController;
@@ -39,6 +40,8 @@ Route::prefix('{current_organization}')
         Route::get('reports', ReportController::class)->name('reports.index');
         Route::get('reports/export/orders', [ReportExportController::class, 'orders'])->name('reports.export.orders');
         Route::get('reports/export/line-items', [ReportExportController::class, 'items'])->name('reports.export.items');
+        Route::get('reports/export/by-shop', [ReportExportController::class, 'shops'])->name('reports.export.shops');
+        Route::get('reports/by-shop', ShopReportController::class)->name('reports.shops');
         Route::get('reports/statuses', [OrderStatusController::class, 'index'])->name('reports.statuses.index');
         Route::patch('reports/statuses', [OrderStatusController::class, 'update'])->name('reports.statuses.update');
 

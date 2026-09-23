@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Reports;
 
+use App\Enums\ShopReportFigure;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Reports\ReportFilterRequest;
+use App\Http\Requests\Reports\ShopReportRequest;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Organization;
@@ -85,6 +87,37 @@ class ReportExportController extends Controller
                     $item->total,
                     $item->total_tax,
                 ];
+            }
+        });
+    }
+
+    /**
+     * Download each shop's revenue, VAT or both as a CSV, with the totals beneath.
+     */
+    public function shops(ShopReportRequest $request, Organization $currentOrganization): StreamedResponse
+    {
+        $filters = $request->filters();
+        $figures = $request->figures();
+        $report = (new SalesReport($filters))->totalsByShop();
+
+        $amounts = fn (array $row) => array_map(fn (ShopReportFigure $figure) => number_format(match ($figure) {
+            ShopReportFigure::Revenue => $row['netRevenue'],
+            ShopReportFigure::Tax => $row['tax'],
+        }, 2, '.', ''), $figures);
+
+        $kind = count($figures) === 1 && $figures[0] === ShopReportFigure::Tax ? 'vat-by-shop' : 'revenue-by-shop';
+
+        return $this->stream($this->filename($currentOrganization, $kind, $filters->rangeLabel()), [
+            'Shop', 'Currency', 'Orders',
+            ...array_map(fn (ShopReportFigure $figure) => $figure->label(), $figures),
+        ], function () use ($report, $amounts) {
+            foreach ($report['rows'] as $row) {
+                yield [$row['name'], $row['currency'], $row['orderCount'], ...$amounts($row)];
+            }
+
+            // Shops in two currencies have no total that means anything.
+            if ($report['totals'] !== null) {
+                yield ['Total', $report['currency'], $report['totals']['orderCount'], ...$amounts($report['totals'])];
             }
         });
     }
