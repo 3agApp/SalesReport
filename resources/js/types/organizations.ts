@@ -26,6 +26,17 @@ export type OrganizationInvitation = {
     role: OrganizationRole;
     role_label: string;
     created_at: string;
+    sent_at_diff: string;
+    expires_at_diff: string | null;
+    is_expired: boolean;
+};
+
+export type OrganizationAttentionItem = {
+    key: string;
+    tone: 'warning' | 'danger';
+    title: string;
+    description: string;
+    target: 'invitations' | 'shops';
 };
 
 export type OrganizationInvitationContext = {
