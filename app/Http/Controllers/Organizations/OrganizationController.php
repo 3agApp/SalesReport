@@ -10,7 +10,10 @@ use App\Http\Requests\Organizations\DeleteOrganizationRequest;
 use App\Http\Requests\Organizations\SaveOrganizationRequest;
 use App\Models\Membership;
 use App\Models\Organization;
+use App\Models\OrganizationInvitation;
 use App\Models\User;
+use App\Support\OrganizationHealth;
+use Carbon\CarbonInterface;
 use DateTimeZone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -51,6 +54,7 @@ class OrganizationController extends Controller
     public function edit(Request $request, Organization $organization): Response
     {
         $user = $request->user();
+        $permissions = $user->toOrganizationPermissions($organization);
 
         return Inertia::render('organizations/edit', [
             'organization' => [
@@ -74,15 +78,22 @@ class OrganizationController extends Controller
             }),
             'invitations' => $organization->invitations()
                 ->whereNull('accepted_at')
+                ->oldest()
                 ->get()
-                ->map(fn ($invitation) => [
+                ->map(fn (OrganizationInvitation $invitation) => [
                     'code' => $invitation->code,
                     'email' => $invitation->email,
                     'role' => $invitation->role->value,
                     'role_label' => $invitation->role->label(),
                     'created_at' => $invitation->created_at->toISOString(),
+                    'sent_at_diff' => $invitation->created_at->diffForHumans(),
+                    // Without "ago" or "from now", so the page can say
+                    // "Expires in 2 days" or "Expired 3 hours ago".
+                    'expires_at_diff' => $invitation->expires_at?->diffForHumans(syntax: CarbonInterface::DIFF_ABSOLUTE),
+                    'is_expired' => $invitation->isExpired(),
                 ]),
-            'permissions' => $user->toOrganizationPermissions($organization),
+            'attention' => fn () => (new OrganizationHealth($organization, $permissions))->attention(),
+            'permissions' => $permissions,
             'availableRoles' => OrganizationRole::assignable(),
             'timezones' => collect(DateTimeZone::listIdentifiers())
                 ->map(fn (string $timezone) => [

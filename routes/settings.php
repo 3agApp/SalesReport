@@ -27,7 +27,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('throttle:6,1')
         ->name('user-password.update');
 
-    Route::inertia('settings/appearance', 'settings/appearance')->name('appearance.edit');
+    // Appearance is a section of the profile page now. The old address
+    // still works for bookmarks and links in sent mail.
+    Route::redirect('settings/appearance', '/settings/profile#appearance')->name('appearance.edit');
 
     Route::get('settings/organizations', [OrganizationController::class, 'index'])->name('organizations.index');
     Route::post('settings/organizations', [OrganizationController::class, 'store'])->name('organizations.store');
@@ -44,6 +46,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('settings/organizations/{organization}/invitations', [OrganizationInvitationController::class, 'store'])->name('organizations.invitations.store');
         Route::delete('settings/organizations/{organization}/invitations/{invitation}', [OrganizationInvitationController::class, 'destroy'])->name('organizations.invitations.destroy');
+        Route::post('settings/organizations/{organization}/invitations/{invitation}/resend', [OrganizationInvitationController::class, 'resend'])
+            ->middleware('throttle:6,1')
+            ->name('organizations.invitations.resend');
     });
 });
 

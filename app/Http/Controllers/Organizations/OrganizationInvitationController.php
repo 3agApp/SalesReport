@@ -66,6 +66,29 @@ class OrganizationInvitationController extends Controller
     }
 
     /**
+     * Send the invitation again, with a fresh expiry date.
+     *
+     * The link in the new email is the same one: the code does not change,
+     * so an earlier email that is opened later still works as well.
+     */
+    public function resend(Organization $organization, OrganizationInvitation $invitation): RedirectResponse
+    {
+        abort_unless($invitation->organization_id === $organization->id, 404);
+        abort_if($invitation->isAccepted(), 404);
+
+        Gate::authorize('inviteMember', $organization);
+
+        $invitation->update(['expires_at' => now()->addDays(3)]);
+
+        Notification::route('mail', $invitation->email)
+            ->notify(new OrganizationInvitationNotification($invitation));
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation sent again.')]);
+
+        return to_route('organizations.edit', ['organization' => $organization->slug]);
+    }
+
+    /**
      * Cancel the specified invitation.
      */
     public function destroy(Organization $organization, OrganizationInvitation $invitation): RedirectResponse
